@@ -459,7 +459,6 @@ function sendFile(res, target, status) {
 
 const app = createApp();
 
-const app = createApp();
 
 if (require.main === module) {
   const port = Number(process.env.PORT) || 3000;
