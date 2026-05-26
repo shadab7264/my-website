@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Admin Login | Skyward Career and Placement Hub</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/admin.js" defer></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container header-row">
+        <a href="/" class="brand"><img src="/assets/skyward-logo.png" alt="Skyward Career and Placement Hub"></a>
+        <a class="button outline" href="/">Return to Website</a>
+      </div>
+    </header>
+
+    <main class="admin-main">
+      <div class="container">
+        <section class="login-panel" data-login-panel>
+          <div class="eyebrow">Administration</div>
+          <h1>Welcome back.</h1>
+          <p class="muted">Sign in to publish student guidance and manage consultation enquiries.</p>
+          <form class="stack-form" data-login-form>
+            <div class="field">
+              <label for="login-email">Email address</label>
+              <input id="login-email" type="email" name="email" autocomplete="username" required placeholder="admin@skywardeducation.com">
+            </div>
+            <div class="field">
+              <label for="login-password">Password</label>
+              <input id="login-password" type="password" name="password" autocomplete="current-password" required placeholder="Your password">
+            </div>
+            <button class="button" type="submit">Sign In Securely</button>
+            <p class="form-message" data-login-message aria-live="polite"></p>
+          </form>
+          <p class="fine-print">For first local setup, use the demo credentials shown in the project README, then set a secure password before launch.</p>
+        </section>
+
+        <section class="dashboard" data-dashboard>
+          <div class="dashboard-head">
+            <div>
+              <div class="eyebrow">Admin Dashboard</div>
+              <h1>Content &amp; enquiries</h1>
+              <p class="muted">Signed in as <span data-admin-email></span></p>
+            </div>
+            <button class="button outline" type="button" data-logout>Log Out</button>
+          </div>
+
+          <div class="dashboard-stats">
+            <div class="dashboard-stat"><span>Total Leads</span><strong data-lead-count>0</strong></div>
+            <div class="dashboard-stat"><span>Published Posts</span><strong data-post-count>0</strong></div>
+            <div class="dashboard-stat"><span>Latest Enquiry</span><strong data-latest-date>-</strong></div>
+          </div>
+
+          <div class="admin-grid">
+            <section class="panel">
+              <h2>Publish content</h2>
+              <form class="stack-form" data-post-form>
+                <div class="field">
+                  <label for="post-title">Post title</label>
+                  <input id="post-title" name="title" required placeholder="e.g. Your UK application checklist">
+                </div>
+                <div class="field">
+                  <label for="post-category">Category</label>
+                  <select id="post-category" name="category">
+                    <option>Admissions</option>
+                    <option>Study Abroad</option>
+                    <option>Scholarships</option>
+                    <option>Visa Support</option>
+                    <option>Careers</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="post-description">Description</label>
+                  <textarea id="post-description" name="description" required placeholder="Write a useful short update for students."></textarea>
+                </div>
+                <div class="field">
+                  <label for="post-media">Image or video (optional)</label>
+                  <input id="post-media" class="file-input" name="media" type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm">
+                  <p class="field-hint">JPG, PNG, WEBP, GIF, MP4 or WEBM, up to 50 MB.</p>
+                </div>
+                <button class="button gold" type="submit">Publish on Website</button>
+                <p class="form-message" data-post-message aria-live="polite"></p>
+              </form>
+            </section>
+            <section class="panel">
+              <h2>Published guidance</h2>
+              <div class="admin-posts" data-admin-posts></div>
+            </section>
+            <section class="panel wide">
+              <div class="panel-head">
+                <div>
+                  <h2>Consultation leads</h2>
+                  <p class="muted sheet-status" data-sheet-status></p>
+                </div>
+                <button class="button outline sync-button" type="button" data-sync-leads>Sync Google Sheet</button>
+              </div>
+              <p class="form-message" data-sync-message aria-live="polite"></p>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr><th>Student</th><th>Contact</th><th>Service</th><th>Source</th><th>Received</th><th>Sheet</th></tr>
+                  </thead>
+                  <tbody data-leads-table></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </section>
+      </div>
+    </main>
+  </body>
+</html>

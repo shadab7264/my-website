@@ -1,0 +1,23 @@
+[
+  {
+    "id": "welcome-counselling",
+    "title": "Build a study path with clarity",
+    "category": "Admissions",
+    "description": "Our counsellors map your academic profile, budget and career ambition to universities where you can thrive.",
+    "createdAt": "2026-05-20T09:00:00.000Z"
+  },
+  {
+    "id": "scholarship-strategy",
+    "title": "Plan early for scholarships",
+    "category": "Funding",
+    "description": "A focused application calendar, strong statement of purpose and timely document preparation can unlock better funding options.",
+    "createdAt": "2026-05-18T09:00:00.000Z"
+  },
+  {
+    "id": "visa-preparation",
+    "title": "Visa guidance made simpler",
+    "category": "Visa Support",
+    "description": "Prepare finances, documentation and interview confidence with experts who understand every milestone of your journey.",
+    "createdAt": "2026-05-15T09:00:00.000Z"
+  }
+]

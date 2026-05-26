@@ -1,0 +1,13 @@
+{
+  "name": "skyward-career-placement-hub",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Premium education consultancy website with lead collection and admin publishing.",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node tests/smoke.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
