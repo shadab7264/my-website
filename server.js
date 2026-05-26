@@ -457,15 +457,20 @@ function sendFile(res, target, status) {
   res.end(contents);
 }
 
+const app = createApp();
+
 if (require.main === module) {
   const port = Number(process.env.PORT) || 3000;
-  const server = createApp();
-  server.listen(port, () => {
+
+  app.listen(port, () => {
     console.log(`Skyward website running at http://localhost:${port}`);
+
     if (!process.env.ADMIN_PASSWORD) {
-      console.log("Admin demo login: admin@skywardeducation.com / ChangeMe123! (change before publishing)");
+      console.log(
+        "Admin demo login: admin@skywardeducation.com / ChangeMe123! (change before publishing)"
+      );
     }
   });
 }
 
-module.exports = { createApp };
+module.exports = app;
