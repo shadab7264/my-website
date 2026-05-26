@@ -469,4 +469,3 @@ if (require.main === module) {
 }
 
 module.exports = { createApp };
-module.exports = app;
