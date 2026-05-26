@@ -459,6 +459,8 @@ function sendFile(res, target, status) {
 
 const app = createApp();
 
+const app = createApp();
+
 if (require.main === module) {
   const port = Number(process.env.PORT) || 3000;
 
@@ -473,4 +475,6 @@ if (require.main === module) {
   });
 }
 
-module.exports = app;
+module.exports = (req, res) => {
+  app.emit("request", req, res);
+};
