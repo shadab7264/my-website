@@ -6,8 +6,10 @@ const http = require("http");
 const path = require("path");
 const { URL } = require("url");
 
-const PUBLIC_DIR = path.join(__dirname, "public");
-const DEFAULT_DATA_DIR = path.join(__dirname, "data");
+const ROOT_DIR = process.cwd();
+
+const PUBLIC_DIR = path.join(ROOT_DIR, "public");
+const DEFAULT_DATA_DIR = path.join(ROOT_DIR, "data");
 const SESSION_MAX_AGE = 8 * 60 * 60 * 1000;
 const MAX_BODY_SIZE = 1024 * 1024;
 const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
