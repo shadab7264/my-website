@@ -457,7 +457,7 @@ function sendFile(res, target, status) {
   res.end(contents);
 }
 
-const app = createApp();
+const  app = createApp();
 
 
 if (require.main === module) {
