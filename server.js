@@ -1,9 +1,10 @@
 "use strict";
-require("dotenv").config();
+
 
 const crypto = require("crypto");
 const fs = require("fs");
 const http = require("http");
+const { createClient } = require("@supabase/supabase-js");
 const path = require("path");
 const { URL } = require("url");
 
@@ -14,6 +15,11 @@ const DEFAULT_DATA_DIR = path.join(ROOT_DIR, "data");
 const SESSION_MAX_AGE = 8 * 60 * 60 * 1000;
 const MAX_BODY_SIZE = 1024 * 1024;
 const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
+
+const supabase = createClient(
+  "https://ctprrqxqiwmzcjsacsmn.supabase.co",
+  "sb_publishable_1DEtfIZ7bwt1xNT3gcbBDw_g5HYVNni"
+);
 const SUPPORTED_MEDIA = {
   "image/jpeg": { extension: ".jpg", type: "image" },
   "image/png": { extension: ".png", type: "image" },
@@ -198,21 +204,7 @@ function createApp(options = {}) {
     return { status: "synced", syncedAt: new Date().toISOString() };
   }
 
-  async function storeAndSyncLead(lead, leads) {
-    lead.sheetsStatus = googleSheetsWebhookUrl ? "pending" : "not_configured";
-    leads.unshift(lead);
-    writeData("leads.json", leads);
-    if (!googleSheetsWebhookUrl) return;
-    try {
-      const result = await syncLeadToGoogleSheet(lead);
-      lead.sheetsStatus = result.status;
-      lead.sheetsSyncedAt = result.syncedAt;
-    } catch {
-      lead.sheetsStatus = "pending";
-    }
-    writeData("leads.json", leads);
-  }
-
+ 
   async function handleApi(req, res, pathname) {
     if (req.method === "GET" && pathname === "/api/content") {
       const posts = readData("posts.json", defaultPosts).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -237,8 +229,24 @@ function createApp(options = {}) {
       if (!lead.name || !validEmail(lead.email) || !lead.phone || !lead.service) {
         return sendJson(res, 400, { error: "Please provide your name, valid email, phone number and service." });
       }
-      const leads = readData("leads.json", []);
-      await storeAndSyncLead(lead, leads);
+     const { error } = await supabase
+  .from("leads")
+  .insert([{
+    name: lead.name,
+    email: lead.email,
+    phone: lead.phone,
+    destination: lead.destination,
+    service: lead.service,
+    message: lead.message,
+    source: lead.source,
+    created_at: new Date().toISOString()
+  }]);
+
+if (error) {
+  return sendJson(res, 500, {
+    error: error.message
+  });
+}
       return sendJson(res, 201, { message: "Thanks! A counsellor will connect with you soon." });
     }
 
@@ -459,7 +467,12 @@ function sendFile(res, target, status) {
   });
   res.end(contents);
 }
+const { createClient } = require("@supabase/supabase-js");
 
+const supabase = createClient(
+  "https://ctprrqxqiwmzcjsacsmn.supabase.co",
+  "sb_publishable_1DEtfIZ7bwt1xNT3gcbBDw_g5HYVNni"
+);
 const app = createApp();
 
 if (require.main === module) {
