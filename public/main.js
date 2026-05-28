@@ -164,7 +164,18 @@ if (postGrid) {
         time.dateTime = post.createdAt;
         time.textContent = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium" }).format(new Date(post.createdAt));
 
-        article.append(tag, title, description, time);
+        const applyButton = document.createElement("a");
+applyButton.href = "/#lead-form";
+applyButton.className = "apply-btn";
+applyButton.textContent = "Apply Now";
+
+article.append(
+  tag,
+  title,
+  description,
+  applyButton,
+  time
+);
         postGrid.append(article);
       });
       addReveal(postGrid.querySelectorAll(".post-card"));

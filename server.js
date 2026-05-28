@@ -4,11 +4,15 @@
 const crypto = require("crypto");
 const fs = require("fs");
 const http = require("http");
-const { createClient } = require("@supabase/supabase-js");
 const path = require("path");
 const { URL } = require("url");
+const { createClient } = require("@supabase/supabase-js");
 
 const ROOT_DIR = process.cwd();
+const supabase = createClient(
+  "https://ctprrqxqiwmzcjsacsmn.supabase.co",
+  "sb_publishable_1DEtfIZ7bwt1xNT3gcbBDw_g5HYVNni"
+);
 
 const PUBLIC_DIR = path.join(ROOT_DIR, "public");
 const DEFAULT_DATA_DIR = path.join(ROOT_DIR, "data");
@@ -16,10 +20,7 @@ const SESSION_MAX_AGE = 8 * 60 * 60 * 1000;
 const MAX_BODY_SIZE = 1024 * 1024;
 const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
 
-const supabase = createClient(
-  "https://ctprrqxqiwmzcjsacsmn.supabase.co",
-  "sb_publishable_1DEtfIZ7bwt1xNT3gcbBDw_g5HYVNni"
-);
+
 const SUPPORTED_MEDIA = {
   "image/jpeg": { extension: ".jpg", type: "image" },
   "image/png": { extension: ".png", type: "image" },
@@ -467,12 +468,7 @@ function sendFile(res, target, status) {
   });
   res.end(contents);
 }
-const { createClient } = require("@supabase/supabase-js");
-
-const supabase = createClient(
-  "https://ctprrqxqiwmzcjsacsmn.supabase.co",
-  "sb_publishable_1DEtfIZ7bwt1xNT3gcbBDw_g5HYVNni"
-);
+  
 const app = createApp();
 
 if (require.main === module) {

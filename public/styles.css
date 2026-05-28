@@ -537,13 +537,13 @@ textarea {
 
 .post-media {
   display: block;
-  width: calc(100% + 58px);
-  height: 204px;
-  margin: -29px -29px 25px;
+  width: 100%;
+  height: 260px;
+  margin-bottom: 20px;
+  border-radius: 18px;
   background: #eef1f5;
   object-fit: cover;
 }
-
 .post-media:is(video) {
   object-fit: contain;
   background: var(--navy-deep);
@@ -1606,4 +1606,21 @@ th {
     opacity: 1;
     transform: none;
   }
+}
+.apply-btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  margin-top:18px;
+  padding:12px 22px;
+  background:var(--gold);
+  color:white;
+  border-radius:12px;
+  font-weight:600;
+  transition:0.3s ease;
+}
+
+.apply-btn:hover{
+  background:var(--navy);
+  transform:translateY(-2px);
 }
