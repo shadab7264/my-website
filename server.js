@@ -247,19 +247,19 @@ ensureStore(dataDir);
   }]);
   if (!error) {
   try {
-    await transporter.sendMail({
-      from: "skywardcareerandplacementhub@gmail.com",
-      to: "skywardcareerandplacementhub@gmail.com",
-      subject: "New Lead Received - Skyward Career",
-      html: `
-        <h2>New Lead Received</h2>
-        <p><strong>Name:</strong> ${lead.name}</p>
-        <p><strong>Phone:</strong> ${lead.phone}</p>
-        <p><strong>Email:</strong> ${lead.email}</p>
-        <p><strong>Service:</strong> ${lead.service}</p>
-        <p><strong>Message:</strong> ${lead.message}</p>
-      `
-    });
+    transporter.sendMail({
+  from: process.env.GMAIL_USER,
+  to: process.env.GMAIL_USER,
+  subject: "New Lead Received - Skyward Career",
+  html: `
+    <h2>New Lead Received</h2>
+    <p><strong>Name:</strong> ${lead.name}</p>
+    <p><strong>Phone:</strong> ${lead.phone}</p>
+    <p><strong>Email:</strong> ${lead.email}</p>
+    <p><strong>Service:</strong> ${lead.service}</p>
+    <p><strong>Message:</strong> ${lead.message}</p>
+  `
+}).catch(err => console.error("Email failed:", err));
   } catch (emailError) {
     console.error("Email failed:", emailError);
   }
@@ -514,11 +514,11 @@ function sendFile(res, target, status) {
   });
   res.end(contents);
 }
-  const transporter = nodemailer.createTransport({
+ const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: "skywardcareerandplacementhub@gmail.com",
-    pass: "pqra lgjk jwof rszg"
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_APP_PASSWORD
   }
 });
 const app = createApp();
