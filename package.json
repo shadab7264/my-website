@@ -8,7 +8,9 @@
     "test": "node tests/smoke.test.js"
   },
   "engines": {
-    "node": ">=18"
+
+
+    "node": "22.x"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.2",
@@ -16,9 +18,6 @@
     "dotenv": "^17.4.2",
     "nodemailer": "^8.0.9"
   }
-}
-{
-  "engines": {
-    "node": "22.x"
-  }
+
+  
 }
