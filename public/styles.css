@@ -1624,3 +1624,22 @@ th {
   background:var(--navy);
   transform:translateY(-2px);
 }
+.whatsapp-float{
+  position:fixed;
+  right:20px;
+  bottom:20px;
+  z-index:9999;
+  background:#25D366;
+  color:white;
+  padding:14px 20px;
+  border-radius:50px;
+  font-weight:600;
+  text-decoration:none;
+  box-shadow:0 8px 25px rgba(0,0,0,0.2);
+  transition:0.3s ease;
+}
+
+.whatsapp-float:hover{
+  transform:translateY(-3px);
+  background:#1ebe5d;
+}

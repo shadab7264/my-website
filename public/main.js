@@ -164,19 +164,30 @@ if (postGrid) {
         time.dateTime = post.createdAt;
         time.textContent = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium" }).format(new Date(post.createdAt));
 
-        const applyButton = document.createElement("a");
-applyButton.href = "/#lead-form";
-applyButton.className = "apply-btn";
-applyButton.textContent = "Apply Now";
+        if (post.showApply) {
+  const applyButton = document.createElement("a");
+  applyButton.href = "#consultation";
+  applyButton.className = "apply-btn";
+  applyButton.textContent = "Apply Now";
 
-article.append(
-  tag,
-  title,
-  description,
-  applyButton,
-  time
-);
-        postGrid.append(article);
+  article.append(
+    tag,
+    title,
+    description,
+    applyButton,
+    time
+  );
+} else {
+  article.append(
+    tag,
+    title,
+    description,
+    time
+  );
+}
+
+postGrid.append(article);
+
       });
       addReveal(postGrid.querySelectorAll(".post-card"));
     })

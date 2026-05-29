@@ -43,6 +43,7 @@
               <h1>Content &amp; enquiries</h1>
               <p class="muted">Signed in as <span data-admin-email></span></p>
             </div>
+           
             <button class="button outline" type="button" data-logout>Log Out</button>
           </div>
 
@@ -78,6 +79,12 @@
                   <label for="post-media">Image or video (optional)</label>
                   <input id="post-media" class="file-input" name="media" type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm">
                   <p class="field-hint">JPG, PNG, WEBP, GIF, MP4 or WEBM, up to 50 MB.</p>
+                  <div class="field">
+  <label class="checkbox-field">
+    <input type="checkbox" name="showApply">
+    Show Apply Button on this post
+  </label>
+</div>
                 </div>
                 <button class="button gold" type="submit">Publish on Website</button>
                 <p class="form-message" data-post-message aria-live="polite"></p>

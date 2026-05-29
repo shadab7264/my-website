@@ -1,6 +1,7 @@
 "use strict";
 
 let csrfToken = "";
+
 const loginPanel = document.querySelector("[data-login-panel]");
 const dashboard = document.querySelector("[data-dashboard]");
 const loginMessage = document.querySelector("[data-login-message]");
@@ -154,10 +155,10 @@ document.querySelector("[data-post-form]").addEventListener("submit", async (eve
   postMessage.textContent = "Publishing...";
   const form = event.currentTarget;
   try {
-    await request("/api/admin/posts", {
-      method: "POST",
-      body: new FormData(form)
-    });
+  await request("/api/admin/posts", {
+  method: "POST",
+  body: new FormData(form)
+});
     form.reset();
     postMessage.textContent = "Your post is now live on the homepage.";
     await loadDashboard();
@@ -175,24 +176,7 @@ document.querySelector("[data-logout]").addEventListener("click", async () => {
   }
 });
 
-document.querySelector("[data-sync-leads]").addEventListener("click", async (event) => {
-  const button = event.currentTarget;
-  syncMessage.classList.remove("error");
-  syncMessage.textContent = "Syncing saved leads...";
-  button.disabled = true;
-  try {
-    const result = await request("/api/admin/leads/sync", { method: "POST" });
-    syncMessage.textContent = result.failed
-      ? `${result.synced} lead(s) synced; ${result.failed} could not be sent yet.`
-      : result.message;
-    await loadDashboard();
-  } catch (error) {
-    syncMessage.classList.add("error");
-    syncMessage.textContent = error.message;
-  } finally {
-    button.disabled = false;
-  }
-});
+
 
 request("/api/admin/session")
   .then(showDashboard)

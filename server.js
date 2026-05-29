@@ -1,6 +1,6 @@
 "use strict";
 
-
+const nodemailer = require("nodemailer");
 const crypto = require("crypto");
 const fs = require("fs");
 const http = require("http");
@@ -68,7 +68,8 @@ function createApp(options = {}) {
   const sessions = new Map();
   const uploadsDir = path.join(dataDir, "uploads");
 
-  ensureStore(dataDir);
+ensureStore(dataDir);
+  
 
   function sendJson(res, status, payload) {
     const body = JSON.stringify(payload);
@@ -212,7 +213,9 @@ function createApp(options = {}) {
       return sendJson(res, 200, { posts });
     }
 
-    if (req.method === "POST" && pathname === "/api/leads") {
+    if (req.method === "POST" && pathname === "/api/leads") 
+      
+      {
       const body = await parseBody(req);
       if (clean(body.website)) return sendJson(res, 201, { message: "Thank you. We will contact you shortly." });
 
@@ -242,6 +245,25 @@ function createApp(options = {}) {
     source: lead.source,
     created_at: new Date().toISOString()
   }]);
+  if (!error) {
+  try {
+    await transporter.sendMail({
+      from: "skywardcareerandplacementhub@gmail.com",
+      to: "skywardcareerandplacementhub@gmail.com",
+      subject: "New Lead Received - Skyward Career",
+      html: `
+        <h2>New Lead Received</h2>
+        <p><strong>Name:</strong> ${lead.name}</p>
+        <p><strong>Phone:</strong> ${lead.phone}</p>
+        <p><strong>Email:</strong> ${lead.email}</p>
+        <p><strong>Service:</strong> ${lead.service}</p>
+        <p><strong>Message:</strong> ${lead.message}</p>
+      `
+    });
+  } catch (emailError) {
+    console.error("Email failed:", emailError);
+  }
+}
 
 if (error) {
   return sendJson(res, 500, {
@@ -281,9 +303,30 @@ if (error) {
     }
 
     if (req.method === "GET" && pathname === "/api/admin/leads") {
-      if (!requireAdmin(req, res)) return;
-      return sendJson(res, 200, { leads: readData("leads.json", []), sheetsConfigured: Boolean(googleSheetsWebhookUrl) });
-    }
+  const session = requireAdmin(req, res);
+  if (!session) return;
+
+  return sendJson(res, 200, {
+    leads: readData("leads.json", []),
+    sheetsConfigured: Boolean(googleSheetsWebhookUrl)
+  });
+}
+
+if (req.method === "DELETE" && pathname.startsWith("/api/admin/leads/")) {
+  const id = pathname.split("/").pop();
+
+  const { error } = await supabase
+    .from("leads")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    return sendJson(res, 400, { error: error.message });
+  }
+
+  return sendJson(res, 200, { success: true });
+}
+
 
     if (req.method === "POST" && pathname === "/api/admin/leads/sync") {
       const session = requireAdmin(req, res);
@@ -306,8 +349,9 @@ if (error) {
         }
       }
       writeData("leads.json", leads);
-      return sendJson(res, 200, { synced, failed, message: `${synced} lead(s) synced to Google Sheets.` });
-    }
+     return sendJson(res, 200, { synced, failed, message: `${synced} lead(s) synced to Google Sheets.` });
+}
+ 
 
     if (req.method === "POST" && pathname === "/api/admin/posts") {
       const session = requireAdmin(req, res);
@@ -319,6 +363,8 @@ if (error) {
         title: clean(body.title),
         category: clean(body.category) || "Guidance",
         description: clean(body.description),
+        showApply: body.showApply === "on",
+
         ...(savedMedia || {}),
         createdAt: new Date().toISOString()
       };
@@ -468,7 +514,13 @@ function sendFile(res, target, status) {
   });
   res.end(contents);
 }
-  
+  const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: "skywardcareerandplacementhub@gmail.com",
+    pass: "pqra lgjk jwof rszg"
+  }
+});
 const app = createApp();
 
 if (require.main === module) {
