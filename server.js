@@ -515,15 +515,19 @@ function sendFile(res, target, status) {
   res.end(contents);
 }
 const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 587,
+  host: process.env.SMTP_SERVER,
+  port: Number(process.env.SMTP_PORT),
   secure: false,
   auth: {
-    user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_APP_PASSWORD
-  },
-  tls: {
-    rejectUnauthorized: false
+    user: process.env.SMTP_LOGIN,
+    pass: process.env.SMTP_PASSWORD
+  }
+});
+transporter.verify((error, success) => {
+  if (error) {
+    console.error("BREVO SMTP ERROR:", error);
+  } else {
+    console.log("BREVO SMTP READY");
   }
 });
 const app = createApp();
