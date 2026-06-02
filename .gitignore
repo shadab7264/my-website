@@ -1,5 +1,6 @@
 node_modules/
 .env
 data/leads.json
+data/gallery.json
 data/uploads/
 data/*.tmp

@@ -7,6 +7,7 @@ const dashboard = document.querySelector("[data-dashboard]");
 const loginMessage = document.querySelector("[data-login-message]");
 const postMessage = document.querySelector("[data-post-message]");
 const syncMessage = document.querySelector("[data-sync-message]");
+const galleryMessage = document.querySelector("[data-gallery-message]");
 
 async function request(url, options = {}) {
   const method = options.method || "GET";
@@ -34,9 +35,10 @@ function showLogin() {
 
 async function loadDashboard() {
   try {
-    const [content, enquiryData] = await Promise.all([request("/api/content"), request("/api/admin/leads")]);
+    const [content, enquiryData, galleryData] = await Promise.all([request("/api/content"), request("/api/admin/leads"), request("/api/gallery")]);
     renderPosts(content.posts);
     renderLeads(enquiryData.leads, enquiryData.sheetsConfigured);
+    renderGallery(galleryData.gallery);
   } catch (error) {
     if (error.message.includes("log in")) showLogin();
   }
@@ -83,6 +85,39 @@ function renderPosts(posts) {
   });
 }
 
+function renderGallery(gallery) {
+  const wrapper = document.querySelector("[data-admin-gallery]");
+  wrapper.replaceChildren();
+  if (!gallery.length) {
+    wrapper.innerHTML = "<p class=\"empty\">No gallery images yet.</p>";
+    return;
+  }
+  gallery.forEach((item) => {
+    const card = document.createElement("article");
+    card.className = "admin-gallery-card";
+
+    const image = document.createElement("img");
+    image.src = item.imageUrl;
+    image.alt = item.title || "Gallery image";
+
+    const content = document.createElement("div");
+    const title = document.createElement("h3");
+    title.textContent = item.title || "Gallery image";
+    const detail = document.createElement("p");
+    detail.textContent = `${item.description || "No caption"} | ${formatDate(item.createdAt)}`;
+
+    const remove = document.createElement("button");
+    remove.className = "button danger";
+    remove.type = "button";
+    remove.textContent = "Delete";
+    remove.addEventListener("click", () => deleteGalleryItem(item.id));
+
+    content.append(title, detail, remove);
+    card.append(image, content);
+    wrapper.append(card);
+  });
+}
+
 function renderLeads(leads, sheetsConfigured) {
   const table = document.querySelector("[data-leads-table]");
   table.replaceChildren();
@@ -121,6 +156,19 @@ async function deletePost(id) {
   }
 }
 
+async function deleteGalleryItem(id) {
+  galleryMessage.classList.remove("error");
+  galleryMessage.textContent = "Deleting gallery image...";
+  try {
+    await request(`/api/admin/gallery/${encodeURIComponent(id)}`, { method: "DELETE" });
+    galleryMessage.textContent = "Gallery image deleted.";
+    await loadDashboard();
+  } catch (error) {
+    galleryMessage.classList.add("error");
+    galleryMessage.textContent = error.message;
+  }
+}
+
 function formatDate(date) {
   return new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(date));
 }
@@ -155,16 +203,35 @@ document.querySelector("[data-post-form]").addEventListener("submit", async (eve
   postMessage.textContent = "Publishing...";
   const form = event.currentTarget;
   try {
-  await request("/api/admin/posts", {
-  method: "POST",
-  body: new FormData(form)
-});
+    await request("/api/admin/posts", {
+      method: "POST",
+      body: new FormData(form)
+    });
     form.reset();
     postMessage.textContent = "Your post is now live on the homepage.";
     await loadDashboard();
   } catch (error) {
     postMessage.classList.add("error");
     postMessage.textContent = error.message;
+  }
+});
+
+document.querySelector("[data-gallery-form]").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  galleryMessage.classList.remove("error");
+  galleryMessage.textContent = "Uploading gallery image...";
+  const form = event.currentTarget;
+  try {
+    await request("/api/admin/gallery", {
+      method: "POST",
+      body: new FormData(form)
+    });
+    form.reset();
+    galleryMessage.textContent = "Gallery image is now live on the homepage.";
+    await loadDashboard();
+  } catch (error) {
+    galleryMessage.classList.add("error");
+    galleryMessage.textContent = error.message;
   }
 });
 

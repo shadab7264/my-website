@@ -213,6 +213,11 @@ ensureStore(dataDir);
       return sendJson(res, 200, { posts });
     }
 
+    if (req.method === "GET" && pathname === "/api/gallery") {
+      const gallery = readData("gallery.json", []).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      return sendJson(res, 200, { gallery });
+    }
+
     if (req.method === "POST" && pathname === "/api/leads") 
       
       {
@@ -352,6 +357,42 @@ if (req.method === "DELETE" && pathname.startsWith("/api/admin/leads/")) {
      return sendJson(res, 200, { synced, failed, message: `${synced} lead(s) synced to Google Sheets.` });
 }
  
+    if (req.method === "POST" && pathname === "/api/admin/gallery") {
+      const session = requireAdmin(req, res);
+      if (!session || !verifyCsrf(req, res, session)) return;
+      const { fields: body, file } = await parsePostSubmission(req);
+      const savedMedia = saveUploadedMedia(file);
+      if (!savedMedia || savedMedia.mediaType !== "image") {
+        if (savedMedia) removeMediaFile(savedMedia.mediaUrl, uploadsDir);
+        return sendJson(res, 400, { error: "Please upload a gallery image." });
+      }
+      const item = {
+        id: crypto.randomUUID(),
+        title: clean(body.title) || "Skyward Gallery",
+        description: clean(body.description),
+        imageUrl: savedMedia.mediaUrl,
+        imageName: savedMedia.mediaName,
+        createdAt: new Date().toISOString()
+      };
+      const gallery = readData("gallery.json", []);
+      gallery.unshift(item);
+      writeData("gallery.json", gallery);
+      return sendJson(res, 201, { item });
+    }
+
+    const galleryMatch = pathname.match(/^\/api\/admin\/gallery\/([a-zA-Z0-9-]+)$/);
+    if (req.method === "DELETE" && galleryMatch) {
+      const session = requireAdmin(req, res);
+      if (!session || !verifyCsrf(req, res, session)) return;
+      const gallery = readData("gallery.json", []);
+      const removedItem = gallery.find((item) => item.id === galleryMatch[1]);
+      const nextGallery = gallery.filter((item) => item.id !== galleryMatch[1]);
+      if (nextGallery.length === gallery.length) return sendJson(res, 404, { error: "Gallery image not found." });
+      writeData("gallery.json", nextGallery);
+      if (removedItem.imageUrl) removeMediaFile(removedItem.imageUrl, uploadsDir);
+      return sendJson(res, 200, { message: "Gallery image deleted." });
+    }
+
 
     if (req.method === "POST" && pathname === "/api/admin/posts") {
       const session = requireAdmin(req, res);
@@ -450,8 +491,10 @@ function ensureStore(dataDir) {
   fs.mkdirSync(path.join(dataDir, "uploads"), { recursive: true });
   const postsPath = path.join(dataDir, "posts.json");
   const leadsPath = path.join(dataDir, "leads.json");
+  const galleryPath = path.join(dataDir, "gallery.json");
   if (!fs.existsSync(postsPath)) fs.writeFileSync(postsPath, `${JSON.stringify(defaultPosts, null, 2)}\n`, "utf8");
   if (!fs.existsSync(leadsPath)) fs.writeFileSync(leadsPath, "[]\n", "utf8");
+  if (!fs.existsSync(galleryPath)) fs.writeFileSync(galleryPath, "[]\n", "utf8");
 }
 
 function parseMultipart(buffer, boundary) {

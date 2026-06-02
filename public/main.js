@@ -195,3 +195,94 @@ postGrid.append(article);
       postGrid.innerHTML = "<p class=\"muted\">Latest guidance will appear here soon.</p>";
     });
 }
+
+const gallerySlideshow = document.querySelector("[data-gallery-slideshow]");
+if (gallerySlideshow) {
+  const stage = gallerySlideshow.querySelector("[data-gallery-stage]");
+  const controls = gallerySlideshow.querySelector("[data-gallery-controls]");
+  const dotsWrapper = gallerySlideshow.querySelector("[data-gallery-dots]");
+  const previous = gallerySlideshow.querySelector("[data-gallery-prev]");
+  const next = gallerySlideshow.querySelector("[data-gallery-next]");
+  let gallery = [];
+  let activeGalleryIndex = 0;
+  let galleryTimer = null;
+
+  function renderGallerySlide(index) {
+    if (!gallery.length) return;
+    activeGalleryIndex = (index + gallery.length) % gallery.length;
+    const item = gallery[activeGalleryIndex];
+    stage.replaceChildren();
+
+    const figure = document.createElement("figure");
+    figure.className = "gallery-slide";
+    const image = document.createElement("img");
+    image.src = item.imageUrl;
+    image.alt = item.title || "Skyward gallery image";
+    image.loading = "lazy";
+
+    const caption = document.createElement("figcaption");
+    const title = document.createElement("h3");
+    title.textContent = item.title || "Skyward Gallery";
+    const description = document.createElement("p");
+    description.textContent = item.description || "A glimpse from Skyward Career and Placement Hub.";
+    caption.append(title, description);
+
+    figure.append(image, caption);
+    stage.append(figure);
+
+    dotsWrapper.querySelectorAll("button").forEach((dot, dotIndex) => {
+      dot.classList.toggle("is-active", dotIndex === activeGalleryIndex);
+      dot.setAttribute("aria-selected", String(dotIndex === activeGalleryIndex));
+    });
+  }
+
+  function pauseGallery() {
+    if (galleryTimer) window.clearInterval(galleryTimer);
+  }
+
+  function playGallery() {
+    pauseGallery();
+    if (!reducedMotion && gallery.length > 1) galleryTimer = window.setInterval(() => renderGallerySlide(activeGalleryIndex + 1), 5000);
+  }
+
+  fetch("/api/gallery")
+    .then((response) => response.json())
+    .then(({ gallery: items }) => {
+      gallery = items || [];
+      if (!gallery.length) {
+        stage.innerHTML = "<p class=\"muted\">Gallery images will appear here soon.</p>";
+        return;
+      }
+      dotsWrapper.replaceChildren();
+      gallery.forEach((item, index) => {
+        const dot = document.createElement("button");
+        dot.className = "slider-dot";
+        dot.type = "button";
+        dot.setAttribute("aria-label", `Show gallery image ${index + 1}`);
+        dot.setAttribute("aria-selected", "false");
+        dot.addEventListener("click", () => {
+          renderGallerySlide(index);
+          playGallery();
+        });
+        dotsWrapper.append(dot);
+      });
+      controls.hidden = gallery.length < 2;
+      renderGallerySlide(0);
+      playGallery();
+      addReveal(document.querySelectorAll(".gallery-slideshow"));
+    })
+    .catch(() => {
+      stage.innerHTML = "<p class=\"muted\">Gallery images could not be loaded.</p>";
+    });
+
+  previous.addEventListener("click", () => {
+    renderGallerySlide(activeGalleryIndex - 1);
+    playGallery();
+  });
+  next.addEventListener("click", () => {
+    renderGallerySlide(activeGalleryIndex + 1);
+    playGallery();
+  });
+  gallerySlideshow.addEventListener("mouseenter", pauseGallery);
+  gallerySlideshow.addEventListener("mouseleave", playGallery);
+}

@@ -97,6 +97,32 @@
             <section class="panel wide">
               <div class="panel-head">
                 <div>
+                  <h2>Gallery slideshow</h2>
+                  <p class="muted sheet-status">Upload images that will slide on the homepage gallery.</p>
+                </div>
+              </div>
+              <form class="stack-form gallery-form" data-gallery-form>
+                <div class="field">
+                  <label for="gallery-title">Image title</label>
+                  <input id="gallery-title" name="title" placeholder="e.g. Student counselling session">
+                </div>
+                <div class="field">
+                  <label for="gallery-description">Short caption</label>
+                  <textarea id="gallery-description" name="description" placeholder="Add a small caption for this gallery image."></textarea>
+                </div>
+                <div class="field">
+                  <label for="gallery-media">Gallery image</label>
+                  <input id="gallery-media" class="file-input" name="media" type="file" accept="image/jpeg,image/png,image/webp,image/gif" required>
+                  <p class="field-hint">JPG, PNG, WEBP or GIF, up to 50 MB.</p>
+                </div>
+                <button class="button gold" type="submit">Add Gallery Image</button>
+                <p class="form-message" data-gallery-message aria-live="polite"></p>
+              </form>
+              <div class="admin-gallery" data-admin-gallery></div>
+            </section>
+            <section class="panel wide">
+              <div class="panel-head">
+                <div>
                   <h2>Consultation leads</h2>
                   <p class="muted sheet-status" data-sheet-status></p>
                 </div>
