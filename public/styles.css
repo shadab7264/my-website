@@ -1643,3 +1643,27 @@ th {
   transform:translateY(-3px);
   background:#1ebe5d;
 }
+.founders-section {
+  padding: 80px 0;
+  text-align: center;
+}
+
+.founders-image {
+  width: 100%;
+  max-width: 850px;
+  margin: 30px auto;
+  display: block;
+  border-radius: 20px;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.12);
+}
+
+.founders-role {
+  color: #2563eb;
+  font-weight: 600;
+  margin: 10px 0;
+}
+
+.founders-text {
+  max-width: 700px;
+  margin: 0 auto;
+}
