@@ -569,7 +569,7 @@ textarea {
   background: var(--navy-deep);
 }
 .admission-ratio {
-  aspect-ratio: 3 / 4;
+  aspect-ratio: 4 / 3;
   height: auto;
   object-fit: cover !important;
 }
