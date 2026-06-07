@@ -416,7 +416,7 @@ if (req.method === "DELETE" && pathname.startsWith("/api/admin/leads/")) {
     }
 
 
-    if (req.method === "POST" && pathname === "/api/admin/posts") {
+    
   const session = requireAdmin(req, res);
   if (!session || !verifyCsrf(req, res, session)) return;
 
@@ -427,36 +427,8 @@ if (file) {
   return sendJson(res, 400, {
     error: "Image uploads are being migrated. Please create text-only posts for now."
   });
-}
 
-  const post = {
-    title: clean(body.title),
-    category: clean(body.category) || "Guidance",
-    description: clean(body.description),
-    show_apply: body.showApply === "on",
-    created_at: new Date().toISOString()
-  };
 
-  if (!post.title || !post.description) {
-    return sendJson(res, 400, {
-      error: "Post title and description are required."
-    });
-  }
-
-  const { data, error } = await supabase
-    .from("posts")
-    .insert([post])
-    .select();
-
-  if (error) {
-    return sendJson(res, 500, {
-      error: error.message
-    });
-  }
-
-  return sendJson(res, 201, {
-    post: data[0]
-  });
 }
 if (req.method === "POST" && pathname === "/api/admin/posts") {
   // ... your Supabase insert code ...
@@ -486,6 +458,7 @@ if (req.method === "DELETE" && postMatch) {
 }
 
 sendJson(res, 404, { error: "Endpoint not found." });
+  }
 
   function serveStatic(res, pathname) {
     const mediaMatch = pathname.match(/^\/media\/([a-f0-9-]+\.(?:jpg|png|webp|gif|mp4|webm))$/i);
