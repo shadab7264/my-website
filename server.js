@@ -224,10 +224,17 @@ ensureStore(dataDir);
     }
 
     if (req.method === "GET" && pathname === "/api/content") {
-      const posts = readData("posts.json", defaultPosts).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-      return sendJson(res, 200, { posts });
-    }
+  const { data: posts, error } = await supabase
+    .from("posts")
+    .select("*")
+    .order("created_at", { ascending: false });
 
+  if (error) {
+    return sendJson(res, 500, { error: error.message });
+  }
+
+  return sendJson(res, 200, { posts });
+}
     if (req.method === "GET" && pathname === "/api/gallery") {
       const gallery = readData("gallery.json", []).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       return sendJson(res, 200, { gallery });
@@ -410,45 +417,75 @@ if (req.method === "DELETE" && pathname.startsWith("/api/admin/leads/")) {
 
 
     if (req.method === "POST" && pathname === "/api/admin/posts") {
-      const session = requireAdmin(req, res);
-      if (!session || !verifyCsrf(req, res, session)) return;
-      const { fields: body, file } = await parsePostSubmission(req);
-      const savedMedia = saveUploadedMedia(file);
-      const post = {
-        id: crypto.randomUUID(),
-        title: clean(body.title),
-        category: clean(body.category) || "Guidance",
-        description: clean(body.description),
-        showApply: body.showApply === "on",
+  const session = requireAdmin(req, res);
+  if (!session || !verifyCsrf(req, res, session)) return;
 
-        ...(savedMedia || {}),
-        createdAt: new Date().toISOString()
-      };
-      if (!post.title || !post.description) {
-        if (savedMedia) removeMediaFile(savedMedia.mediaUrl, uploadsDir);
-        return sendJson(res, 400, { error: "Post title and description are required." });
-      }
-      const posts = readData("posts.json", defaultPosts);
-      posts.unshift(post);
-      writeData("posts.json", posts);
-      return sendJson(res, 201, { post });
-    }
+  
+  const { fields: body, file } = await parsePostSubmission(req);
 
-    const postMatch = pathname.match(/^\/api\/admin\/posts\/([a-zA-Z0-9-]+)$/);
-    if (req.method === "DELETE" && postMatch) {
-      const session = requireAdmin(req, res);
-      if (!session || !verifyCsrf(req, res, session)) return;
-      const posts = readData("posts.json", defaultPosts);
-      const removedPost = posts.find((post) => post.id === postMatch[1]);
-      const nextPosts = posts.filter((post) => post.id !== postMatch[1]);
-      if (nextPosts.length === posts.length) return sendJson(res, 404, { error: "Post not found." });
-      writeData("posts.json", nextPosts);
-      if (removedPost.mediaUrl) removeMediaFile(removedPost.mediaUrl, uploadsDir);
-      return sendJson(res, 200, { message: "Post deleted." });
-    }
+if (file) {
+  return sendJson(res, 400, {
+    error: "Image uploads are being migrated. Please create text-only posts for now."
+  });
+}
 
-    sendJson(res, 404, { error: "Endpoint not found." });
+  const post = {
+    title: clean(body.title),
+    category: clean(body.category) || "Guidance",
+    description: clean(body.description),
+    show_apply: body.showApply === "on",
+    created_at: new Date().toISOString()
+  };
+
+  if (!post.title || !post.description) {
+    return sendJson(res, 400, {
+      error: "Post title and description are required."
+    });
   }
+
+  const { data, error } = await supabase
+    .from("posts")
+    .insert([post])
+    .select();
+
+  if (error) {
+    return sendJson(res, 500, {
+      error: error.message
+    });
+  }
+
+  return sendJson(res, 201, {
+    post: data[0]
+  });
+}
+if (req.method === "POST" && pathname === "/api/admin/posts") {
+  // ... your Supabase insert code ...
+  return sendJson(res, 201, {
+    post: data[0]
+  });
+}
+
+const postMatch = pathname.match(/^\/api\/admin\/posts\/([a-zA-Z0-9-]+)$/);
+
+if (req.method === "DELETE" && postMatch) {
+  const session = requireAdmin(req, res);
+  if (!session || !verifyCsrf(req, res, session)) return;
+
+  const { error } = await supabase
+    .from("posts")
+    .delete()
+    .eq("id", postMatch[1]);
+
+  if (error) {
+    return sendJson(res, 400, { error: error.message });
+  }
+
+  return sendJson(res, 200, {
+    message: "Post deleted."
+  });
+}
+
+sendJson(res, 404, { error: "Endpoint not found." });
 
   function serveStatic(res, pathname) {
     const mediaMatch = pathname.match(/^\/media\/([a-f0-9-]+\.(?:jpg|png|webp|gif|mp4|webm))$/i);
