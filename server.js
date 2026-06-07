@@ -293,6 +293,8 @@ ensureStore(dataDir);
 }
 
 if (error) {
+  console.error("POSTS INSERT ERROR:", error);
+
   return sendJson(res, 500, {
     error: error.message
   });
