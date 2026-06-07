@@ -431,10 +431,34 @@ if (file) {
 
 }
 if (req.method === "POST" && pathname === "/api/admin/posts") {
-  // ... your Supabase insert code ...
-  return sendJson(res, 201, {
-    post: data[0]
-  });
+  const session = requireAdmin(req, res);
+  if (!session || !verifyCsrf(req, res, session)) return;
+
+  const { fields: body, file } = await parsePostSubmission(req);
+  const savedMedia = saveUploadedMedia(file);
+
+  const post = {
+    id: crypto.randomUUID(),
+    title: clean(body.title),
+    category: clean(body.category) || "Guidance",
+    description: clean(body.description),
+    showApply: body.showApply === "on",
+    ...(savedMedia || {}),
+    createdAt: new Date().toISOString()
+  };
+
+  if (!post.title || !post.description) {
+    if (savedMedia) removeMediaFile(savedMedia.mediaUrl, uploadsDir);
+    return sendJson(res, 400, {
+      error: "Post title and description are required."
+    });
+  }
+
+  const posts = readData("posts.json", defaultPosts);
+  posts.unshift(post);
+  writeData("posts.json", posts);
+
+  return sendJson(res, 201, { post });
 }
 
 const postMatch = pathname.match(/^\/api\/admin\/posts\/([a-zA-Z0-9-]+)$/);
