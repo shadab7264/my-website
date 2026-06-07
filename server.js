@@ -439,8 +439,42 @@ if (req.method === "POST" && pathname === "/api/admin/posts") {
   });
 }
 
-const postMatch = pathname.match(/^\/api\/admin\/posts\/([a-zA-Z0-9-]+)$/);
+if (req.method === "POST" && pathname === "/api/admin/posts") {
+  const session = requireAdmin(req, res);
+  if (!session || !verifyCsrf(req, res, session)) return;
 
+  const { fields: body, file } = await parsePostSubmission(req);
+
+  if (file) {
+    return sendJson(res, 400, {
+      error: "Image uploads are being migrated. Please create text-only posts for now."
+    });
+  }
+
+  const post = {
+    title: clean(body.title),
+    category: clean(body.category) || "Guidance",
+    description: clean(body.description),
+    show_apply: body.showApply === "on",
+    created_at: new Date().toISOString()
+  };
+
+  const { data, error } = await supabase
+    .from("posts")
+    .insert([post])
+    .select();
+
+  if (error) {
+    console.error("POSTS INSERT ERROR:", error);
+    return sendJson(res, 500, {
+      error: error.message
+    });
+  }
+
+  return sendJson(res, 201, {
+    post: data[0]
+  });
+}
 if (req.method === "DELETE" && postMatch) {
   const session = requireAdmin(req, res);
   if (!session || !verifyCsrf(req, res, session)) return;
