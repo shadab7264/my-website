@@ -8,6 +8,7 @@ const loginMessage = document.querySelector("[data-login-message]");
 const postMessage = document.querySelector("[data-post-message]");
 const syncMessage = document.querySelector("[data-sync-message]");
 const galleryMessage = document.querySelector("[data-gallery-message]");
+const contentMessage = document.querySelector("[data-content-message]");
 
 async function request(url, options = {}) {
   const method = options.method || "GET";
@@ -35,7 +36,19 @@ function showLogin() {
 
 async function loadDashboard() {
   try {
-    const [content, enquiryData, galleryData] = await Promise.all([request("/api/content"), request("/api/admin/leads"), request("/api/gallery")]);
+    const [content, enquiryData, galleryData, siteContentData] = await Promise.all([request("/api/content"), request("/api/admin/leads"), request("/api/gallery"), request("/api/content/site")]);
+    
+    const siteContent = siteContentData.content || {};
+    const titleInput = document.querySelector("#content-heroTitle");
+    const descInput = document.querySelector("#content-heroDesc");
+    const headlineInput = document.querySelector("#content-aboutHeadline");
+    const contactInput = document.querySelector("#content-contactText");
+    
+    if (titleInput) titleInput.value = siteContent.heroTitle || "";
+    if (descInput) descInput.value = siteContent.heroDesc || "";
+    if (headlineInput) headlineInput.value = siteContent.aboutHeadline || "";
+    if (contactInput) contactInput.value = siteContent.contactText || "";
+
     renderPosts(content.posts);
     renderLeads(enquiryData.leads, enquiryData.sheetsConfigured);
     renderGallery(galleryData.gallery);
@@ -234,6 +247,31 @@ document.querySelector("[data-gallery-form]").addEventListener("submit", async (
     galleryMessage.textContent = error.message;
   }
 });
+
+const contentForm = document.querySelector("[data-content-form]");
+if (contentForm) {
+  contentForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (contentMessage) {
+      contentMessage.classList.remove("error");
+      contentMessage.textContent = "Updating site content...";
+    }
+    const form = event.currentTarget;
+    try {
+      await request("/api/admin/content/site", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(Object.fromEntries(new FormData(form).entries()))
+      });
+      if (contentMessage) contentMessage.textContent = "Site content updated successfully.";
+    } catch (error) {
+      if (contentMessage) {
+        contentMessage.classList.add("error");
+        contentMessage.textContent = error.message;
+      }
+    }
+  });
+}
 
 document.querySelector("[data-logout]").addEventListener("click", async () => {
   try {

@@ -2,6 +2,63 @@
 
 document.body.classList.add("motion-ready");
 
+fetch("/api/content/site")
+  .then(res => res.json())
+  .then(data => {
+    const siteContent = data.content;
+    if (!siteContent) return;
+    document.querySelectorAll("[data-content-key]").forEach(el => {
+      const key = el.getAttribute("data-content-key");
+      if (siteContent[key]) {
+        el.textContent = siteContent[key];
+      }
+    });
+  })
+  .catch(err => console.error("Failed to load site content", err));
+
+const typingElement = document.querySelector("[data-typing-text]");
+if (typingElement) {
+  const words = [
+    "College Admission",
+    "Job Counselling",
+    "JEE and NEET Counselling",
+    "B.Ed and D.El.Ed Admission",
+    "PGDCA Admission",
+    "B.Lib Admission",
+    "Private Jobs"
+  ];
+  let wordIndex = 0;
+  let charIndex = 0;
+  let isDeleting = false;
+  let typingDelay = 100;
+
+  function typeEffect() {
+    const currentWord = words[wordIndex];
+    if (isDeleting) {
+      typingElement.textContent = currentWord.substring(0, charIndex - 1);
+      charIndex--;
+      typingDelay = 50;
+    } else {
+      typingElement.textContent = currentWord.substring(0, charIndex + 1);
+      charIndex++;
+      typingDelay = 100;
+    }
+
+    if (!isDeleting && charIndex === currentWord.length) {
+      isDeleting = true;
+      typingDelay = 2000;
+    } else if (isDeleting && charIndex === 0) {
+      isDeleting = false;
+      wordIndex = (wordIndex + 1) % words.length;
+      typingDelay = 500;
+    }
+
+    setTimeout(typeEffect, typingDelay);
+  }
+
+  setTimeout(typeEffect, 500);
+}
+
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 let revealObserver = null;
 
@@ -130,70 +187,117 @@ document.querySelectorAll("[data-lead-form]").forEach((form) => {
   });
 });
 
-const postGrid = document.querySelector("[data-posts]");
-if (postGrid) {
+const postsSlideshow = document.querySelector("[data-posts-slideshow]");
+if (postsSlideshow) {
+  const stage = postsSlideshow.querySelector("[data-posts-stage]");
+  const controls = postsSlideshow.querySelector("[data-posts-controls]");
+  const dotsWrapper = postsSlideshow.querySelector("[data-posts-dots]");
+  const previous = postsSlideshow.querySelector("[data-posts-prev]");
+  const next = postsSlideshow.querySelector("[data-posts-next]");
+  let posts = [];
+  let activeIndex = 0;
+  let timer = null;
+
+  function renderSlide(index) {
+    if (!posts.length) return;
+    activeIndex = (index + posts.length) % posts.length;
+    const post = posts[activeIndex];
+    stage.replaceChildren();
+
+    const article = document.createElement("article");
+    article.className = "post-card";
+
+    const tag = document.createElement("span");
+    tag.className = "tag";
+    tag.textContent = post.category;
+    if (post.mediaUrl) {
+      const media = post.mediaType === "video" ? document.createElement("video") : document.createElement("img");
+      media.className = "post-media admission-ratio";
+      media.src = post.mediaUrl;
+      media.alt = post.mediaType === "image" ? post.title : "";
+      if (post.mediaType === "video") {
+        media.controls = true;
+        media.preload = "metadata";
+      } else {
+        media.loading = "lazy";
+      }
+      article.append(media);
+    }
+    const title = document.createElement("h3");
+    title.textContent = post.title;
+    const description = document.createElement("p");
+    description.textContent = post.description;
+    const time = document.createElement("time");
+    time.dateTime = post.createdAt;
+    time.textContent = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium" }).format(new Date(post.createdAt));
+
+    if (post.showApply) {
+      const applyButton = document.createElement("a");
+      applyButton.href = "#consultation";
+      applyButton.className = "apply-btn";
+      applyButton.textContent = "Apply Now";
+      article.append(tag, title, description, applyButton, time);
+    } else {
+      article.append(tag, title, description, time);
+    }
+
+    stage.append(article);
+
+    dotsWrapper.querySelectorAll("button").forEach((dot, dotIndex) => {
+      dot.classList.toggle("is-active", dotIndex === activeIndex);
+      dot.setAttribute("aria-selected", String(dotIndex === activeIndex));
+    });
+  }
+
+  function pause() {
+    if (timer) window.clearInterval(timer);
+  }
+
+  function play() {
+    pause();
+    if (!reducedMotion && posts.length > 1) timer = window.setInterval(() => renderSlide(activeIndex + 1), 5000);
+  }
+
   fetch("/api/content")
     .then((response) => response.json())
-    .then(({ posts }) => {
-      postGrid.innerHTML = "";
-      posts.slice(0, 6).forEach((post) => {
-        const article = document.createElement("article");
-        article.className = "post-card";
-
-        const tag = document.createElement("span");
-        tag.className = "tag";
-        tag.textContent = post.category;
-        if (post.mediaUrl) {
-          const media = post.mediaType === "video" ? document.createElement("video") : document.createElement("img");
-          media.className = "post-media";
-          media.src = post.mediaUrl;
-          media.alt = post.mediaType === "image" ? post.title : "";
-          if (post.mediaType === "video") {
-            media.controls = true;
-            media.preload = "metadata";
-          } else {
-            media.loading = "lazy";
-          }
-          article.append(media);
-        }
-        const title = document.createElement("h3");
-        title.textContent = post.title;
-        const description = document.createElement("p");
-        description.textContent = post.description;
-        const time = document.createElement("time");
-        time.dateTime = post.createdAt;
-        time.textContent = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium" }).format(new Date(post.createdAt));
-
-        if (post.showApply) {
-  const applyButton = document.createElement("a");
-  applyButton.href = "#consultation";
-  applyButton.className = "apply-btn";
-  applyButton.textContent = "Apply Now";
-
-  article.append(
-    tag,
-    title,
-    description,
-    applyButton,
-    time
-  );
-} else {
-  article.append(
-    tag,
-    title,
-    description,
-    time
-  );
-}
-
-postGrid.append(article);
-
+    .then(({ posts: fetchedPosts }) => {
+      posts = fetchedPosts.slice(0, 6) || [];
+      if (!posts.length) {
+        stage.innerHTML = "<p class=\"muted\">Latest guidance will appear here soon.</p>";
+        return;
+      }
+      dotsWrapper.replaceChildren();
+      posts.forEach((item, index) => {
+        const dot = document.createElement("button");
+        dot.className = "slider-dot";
+        dot.type = "button";
+        dot.setAttribute("aria-label", `Show post ${index + 1}`);
+        dot.setAttribute("aria-selected", "false");
+        dot.addEventListener("click", () => {
+          renderSlide(index);
+          play();
+        });
+        dotsWrapper.append(dot);
       });
-      addReveal(postGrid.querySelectorAll(".post-card"));
+      controls.hidden = posts.length < 2;
+      renderSlide(0);
+      play();
+      addReveal(document.querySelectorAll(".posts-slideshow"));
     })
     .catch(() => {
-      postGrid.innerHTML = "<p class=\"muted\">Latest guidance will appear here soon.</p>";
+      stage.innerHTML = "<p class=\"muted\">Latest guidance will appear here soon.</p>";
     });
+
+  previous.addEventListener("click", () => {
+    renderSlide(activeIndex - 1);
+    play();
+  });
+  next.addEventListener("click", () => {
+    renderSlide(activeIndex + 1);
+    play();
+  });
+  postsSlideshow.addEventListener("mouseenter", pause);
+  postsSlideshow.addEventListener("mouseleave", play);
 }
 
 const gallerySlideshow = document.querySelector("[data-gallery-slideshow]");
@@ -286,3 +390,37 @@ if (gallerySlideshow) {
   gallerySlideshow.addEventListener("mouseenter", pauseGallery);
   gallerySlideshow.addEventListener("mouseleave", playGallery);
 }
+
+// Interactive 3D Tilt Parallax Effect (0ms loading time, GPU-accelerated)
+(function init3DTilt() {
+  const tiltElements = document.querySelectorAll("[data-tilt]");
+  const isMobile = window.matchMedia("(max-width: 768px)").matches;
+  if (isMobile) return; // Disable on mobile to prevent layout shifting on touch
+
+  tiltElements.forEach((el) => {
+    el.addEventListener("mousemove", (e) => {
+      const rect = el.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
+      
+      // Calculate tilt: max 6 degrees rotation
+      const rotateX = ((centerY - y) / centerY) * 6;
+      const rotateY = ((x - centerX) / centerX) * -6;
+      
+      el.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateY(-6px)`;
+      el.style.boxShadow = "0 30px 60px rgba(9, 43, 33, 0.12)";
+      el.style.transition = "transform 100ms ease, box-shadow 100ms ease";
+    });
+    
+    el.style.transformStyle = "preserve-3d";
+    
+    el.addEventListener("mouseleave", () => {
+      el.style.transform = "perspective(1000px) rotateX(0deg) rotateY(0deg) translateY(0)";
+      el.style.boxShadow = "";
+      el.style.transition = "transform 400ms ease, box-shadow 400ms ease";
+    });
+  });
+})();

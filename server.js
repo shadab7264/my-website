@@ -208,6 +208,21 @@ ensureStore(dataDir);
 
  
   async function handleApi(req, res, pathname) {
+    if (req.method === "GET" && pathname === "/api/content/site") {
+      const content = readData("content.json", {});
+      return sendJson(res, 200, { content });
+    }
+
+    if (req.method === "POST" && pathname === "/api/admin/content/site") {
+      const session = requireAdmin(req, res);
+      if (!session || !verifyCsrf(req, res, session)) return;
+      const body = await parseBody(req);
+      const content = readData("content.json", {});
+      const newContent = { ...content, ...body };
+      writeData("content.json", newContent);
+      return sendJson(res, 200, { message: "Content updated successfully.", content: newContent });
+    }
+
     if (req.method === "GET" && pathname === "/api/content") {
       const posts = readData("posts.json", defaultPosts).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       return sendJson(res, 200, { posts });
@@ -457,9 +472,14 @@ if (req.method === "DELETE" && pathname.startsWith("/api/admin/leads/")) {
     res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
     res.setHeader(
       "Content-Security-Policy",
-      "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; media-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'self'; frame-ancestors 'none'"
+      "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'self' https:; connect-src 'self'; form-action 'self'; base-uri 'self'; frame-ancestors 'none'; upgrade-insecure-requests;"
     );
     const pathname = new URL(req.url, "http://localhost").pathname;
+    
+    if (req.headers['x-forwarded-proto'] && req.headers['x-forwarded-proto'] !== 'https') {
+      res.writeHead(301, { 'Location': `https://${req.headers.host}${req.url}` });
+      return res.end();
+    }
     try {
       if (pathname.startsWith("/api/")) return await handleApi(req, res, pathname);
       if (req.method !== "GET" && req.method !== "HEAD") return sendJson(res, 405, { error: "Method not allowed." });
@@ -492,9 +512,11 @@ function ensureStore(dataDir) {
   const postsPath = path.join(dataDir, "posts.json");
   const leadsPath = path.join(dataDir, "leads.json");
   const galleryPath = path.join(dataDir, "gallery.json");
+  const contentPath = path.join(dataDir, "content.json");
   if (!fs.existsSync(postsPath)) fs.writeFileSync(postsPath, `${JSON.stringify(defaultPosts, null, 2)}\n`, "utf8");
   if (!fs.existsSync(leadsPath)) fs.writeFileSync(leadsPath, "[]\n", "utf8");
   if (!fs.existsSync(galleryPath)) fs.writeFileSync(galleryPath, "[]\n", "utf8");
+  if (!fs.existsSync(contentPath)) fs.writeFileSync(contentPath, "{}\n", "utf8");
 }
 
 function parseMultipart(buffer, boundary) {
