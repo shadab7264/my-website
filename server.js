@@ -433,10 +433,14 @@ if (file) {
 if (req.method === "POST" && pathname === "/api/admin/posts") {
   const session = requireAdmin(req, res);
   if (!session || !verifyCsrf(req, res, session)) return;
+ const { fields: body, file } = await parsePostSubmission(req);
 
-  const { fields: body, file } = await parsePostSubmission(req);
+console.log("FIELDS:", JSON.stringify(body));
+console.log("TITLE:", body.title);
+console.log("DESCRIPTION:", body.description);
+console.log("FILE:", !!file);
   const savedMedia = saveUploadedMedia(file);
-
+  console.log("POST BODY:", body);
   const post = {
     id: crypto.randomUUID(),
     title: clean(body.title),
