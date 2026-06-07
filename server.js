@@ -293,8 +293,6 @@ ensureStore(dataDir);
 }
 
 if (error) {
-  console.error("POSTS INSERT ERROR:", error);
-
   return sendJson(res, 500, {
     error: error.message
   });
@@ -439,42 +437,8 @@ if (req.method === "POST" && pathname === "/api/admin/posts") {
   });
 }
 
-if (req.method === "POST" && pathname === "/api/admin/posts") {
-  const session = requireAdmin(req, res);
-  if (!session || !verifyCsrf(req, res, session)) return;
+const postMatch = pathname.match(/^\/api\/admin\/posts\/([a-zA-Z0-9-]+)$/);
 
-  const { fields: body, file } = await parsePostSubmission(req);
-
-  if (file) {
-    return sendJson(res, 400, {
-      error: "Image uploads are being migrated. Please create text-only posts for now."
-    });
-  }
-
-  const post = {
-    title: clean(body.title),
-    category: clean(body.category) || "Guidance",
-    description: clean(body.description),
-    show_apply: body.showApply === "on",
-    created_at: new Date().toISOString()
-  };
-
-  const { data, error } = await supabase
-    .from("posts")
-    .insert([post])
-    .select();
-
-  if (error) {
-    console.error("POSTS INSERT ERROR:", error);
-    return sendJson(res, 500, {
-      error: error.message
-    });
-  }
-
-  return sendJson(res, 201, {
-    post: data[0]
-  });
-}
 if (req.method === "DELETE" && postMatch) {
   const session = requireAdmin(req, res);
   if (!session || !verifyCsrf(req, res, session)) return;
@@ -530,11 +494,11 @@ sendJson(res, 404, { error: "Endpoint not found." });
       if (pathname.startsWith("/api/")) return await handleApi(req, res, pathname);
       if (req.method !== "GET" && req.method !== "HEAD") return sendJson(res, 405, { error: "Method not allowed." });
       serveStatic(res, pathname);
-    }catch (error) {
-  console.error("SERVER ERROR:", error);
-
-  sendJson(res, 500, {
-    error: error.message || String(error)
+    } catch (error) {
+      const inputError = /(large|format|Upload a|smaller than)/.test(error.message);
+      const status = inputError ? 400 : 500;
+      sendJson(res, status, { error: status === 500 ? "Something went wrong. Please try again." : error.message });
+    }
   });
 }
 
