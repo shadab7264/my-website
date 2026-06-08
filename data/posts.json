@@ -1,5 +1,16 @@
 [
   {
+    "id": "5abc9362-b957-4c87-887c-091831c8cc38",
+    "title": "Test",
+    "category": "Admissions",
+    "description": "Test",
+    "showApply": true,
+    "mediaUrl": "/media/d284012e-902b-4b49-a5f4-01d019a6d178.png",
+    "mediaType": "image",
+    "mediaName": "Gemini_Generated_Image_nks644nks644nks6.png",
+    "createdAt": "2026-06-08T17:06:38.612Z"
+  },
+  {
     "id": "welcome-counselling",
     "title": "Build a study path with clarity",
     "category": "Admissions",
