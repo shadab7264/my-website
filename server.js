@@ -33,7 +33,7 @@ const SUPPORTED_MEDIA = {
 
 const defaultPosts = [
   {
-    id: "welcome-counselling",
+    id: "d92a0149-a2a1-4328-924b-d7168e3a51f1",
     title: "Build a study path with clarity",
     category: "Admissions",
     description:
@@ -41,7 +41,7 @@ const defaultPosts = [
     createdAt: "2026-05-20T09:00:00.000Z"
   },
   {
-    id: "scholarship-strategy",
+    id: "d92a0149-a2a1-4328-924b-d7168e3a51f2",
     title: "Plan early for scholarships",
     category: "Funding",
     description:
@@ -49,7 +49,7 @@ const defaultPosts = [
     createdAt: "2026-05-18T09:00:00.000Z"
   },
   {
-    id: "visa-preparation",
+    id: "d92a0149-a2a1-4328-924b-d7168e3a51f3",
     title: "Visa guidance made simpler",
     category: "Visa Support",
     description:
