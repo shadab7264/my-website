@@ -166,7 +166,7 @@ ensureStore(dataDir);
     if (file.data.length > MAX_UPLOAD_SIZE) throw new Error("Media file must be smaller than 50 MB.");
     const fileName = `${crypto.randomUUID()}${media.extension}`;
     
-    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    if (SUPABASE_KEY && SUPABASE_KEY !== "sb_publishable_1DEtfIZ7bwt1xNT3gcbBDw_g5HYVNni") {
       try {
         const { data, error } = await supabase.storage
           .from("media")
