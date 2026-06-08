@@ -12,7 +12,19 @@ const { createClient } = require("@supabase/supabase-js");
 
 const ROOT_DIR = process.cwd();
 const SUPABASE_URL = process.env.SUPABASE_URL || "https://ctprrqxqiwmzcjsacsmn.supabase.co";
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || "sb_publishable_1DEtfIZ7bwt1xNT3gcbBDw_g5HYVNni";
+
+let rawKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 
+             process.env.SUPABASE_SERVICE_KEY || 
+             process.env.SERVICE_ROLE_KEY || 
+             process.env.SUPABASE_SECRET_KEY || 
+             process.env.SUPABASE_ADMIN_KEY || 
+             process.env.SUPABASE_KEY || 
+             "sb_publishable_1DEtfIZ7bwt1xNT3gcbBDw_g5HYVNni";
+
+// Auto-sanitize whitespace and double/single quotes
+rawKey = String(rawKey).trim().replace(/^["']|["']$/g, "");
+
+const SUPABASE_KEY = rawKey;
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 function isServiceRoleKey(key) {
