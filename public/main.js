@@ -207,9 +207,37 @@ if (postsSlideshow) {
     const article = document.createElement("article");
     article.className = "post-card";
 
+    const content = document.createElement("div");
+    content.className = "post-content";
+
     const tag = document.createElement("span");
     tag.className = "tag";
     tag.textContent = post.category;
+
+    const title = document.createElement("h3");
+    title.textContent = post.title;
+
+    const description = document.createElement("p");
+    description.textContent = post.description;
+
+    const time = document.createElement("time");
+    time.dateTime = post.createdAt;
+    time.textContent = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium" }).format(new Date(post.createdAt));
+
+    let applyButton = null;
+    if (post.showApply) {
+      applyButton = document.createElement("a");
+      applyButton.href = "#consultation";
+      applyButton.className = "apply-btn";
+      applyButton.textContent = "Apply Now";
+    }
+
+    if (applyButton) {
+      content.append(tag, title, description, applyButton, time);
+    } else {
+      content.append(tag, title, description, time);
+    }
+
     if (post.mediaUrl) {
       const media = post.mediaType === "video" ? document.createElement("video") : document.createElement("img");
       media.className = "post-media admission-ratio";
@@ -221,24 +249,10 @@ if (postsSlideshow) {
       } else {
         media.loading = "lazy";
       }
-      article.append(media);
-    }
-    const title = document.createElement("h3");
-    title.textContent = post.title;
-    const description = document.createElement("p");
-    description.textContent = post.description;
-    const time = document.createElement("time");
-    time.dateTime = post.createdAt;
-    time.textContent = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium" }).format(new Date(post.createdAt));
-
-    if (post.showApply) {
-      const applyButton = document.createElement("a");
-      applyButton.href = "#consultation";
-      applyButton.className = "apply-btn";
-      applyButton.textContent = "Apply Now";
-      article.append(tag, title, description, applyButton, time);
+      article.classList.add("has-media");
+      article.append(media, content);
     } else {
-      article.append(tag, title, description, time);
+      article.append(content);
     }
 
     stage.append(article);
