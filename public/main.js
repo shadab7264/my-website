@@ -424,3 +424,144 @@ if (gallerySlideshow) {
     });
   });
 })();
+
+// Premium 3D Rotating Globe Network Animation (0ms external load, GPU-accelerated)
+(function init3DGlobe() {
+  const canvas = document.getElementById("hero-globe-3d");
+  if (!canvas) return;
+
+  const ctx = canvas.getContext("2d");
+  let width = canvas.offsetWidth;
+  let height = canvas.offsetHeight;
+  
+  // High DPI support
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = width * dpr;
+  canvas.height = height * dpr;
+  ctx.scale(dpr, dpr);
+
+  const points = [];
+  const pointCount = 90;
+  const maxDistance = 90;
+
+  // Generate points on a sphere using Fibonacci lattice for even distribution
+  for (let i = 0; i < pointCount; i++) {
+    const phi = Math.acos(-1 + (2 * i) / pointCount);
+    const theta = Math.sqrt(pointCount * Math.PI) * phi;
+    
+    // Base radius: 180px
+    const r = 180;
+    points.push({
+      x: r * Math.sin(phi) * Math.cos(theta),
+      y: r * Math.sin(phi) * Math.sin(theta),
+      z: r * Math.cos(phi)
+    });
+  }
+
+  let angleX = 0.0012;
+  let angleY = 0.0015;
+
+  // Interactive mouse influence
+  let targetAngleX = 0.0012;
+  let targetAngleY = 0.0015;
+  
+  window.addEventListener("mousemove", (e) => {
+    const amountX = (e.clientY / window.innerHeight) - 0.5;
+    const amountY = (e.clientX / window.innerWidth) - 0.5;
+    // Tweak speeds based on mouse position
+    targetAngleX = amountX * 0.006;
+    targetAngleY = amountY * 0.006;
+  });
+
+  function rotateX(p, angle) {
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const y = p.y * cos - p.z * sin;
+    const z = p.y * sin + p.z * cos;
+    return { x: p.x, y, z };
+  }
+
+  function rotateY(p, angle) {
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const x = p.x * cos - p.z * sin;
+    const z = p.x * sin + p.z * cos;
+    return { x, y: p.y, z };
+  }
+
+  function render() {
+    ctx.clearRect(0, 0, width, height);
+
+    // Ease speeds
+    angleX += (targetAngleX - angleX) * 0.05;
+    angleY += (targetAngleY - angleY) * 0.05;
+
+    // Minimum slow rotation speed
+    const currentAngleX = Math.abs(angleX) < 0.0006 ? 0.0006 * Math.sign(angleX || 1) : angleX;
+    const currentAngleY = Math.abs(angleY) < 0.0008 ? 0.0008 * Math.sign(angleY || 1) : angleY;
+
+    // Rotate and project points
+    const projected = points.map((p, i) => {
+      // Apply rotations
+      points[i] = rotateY(rotateX(p, currentAngleX), currentAngleY);
+      
+      const fov = 350;
+      const scale = fov / (fov + points[i].z + 200);
+      return {
+        x: width / 2 + points[i].x * scale,
+        y: height / 2 + points[i].y * scale,
+        z: points[i].z,
+        scale: scale
+      };
+    });
+
+    // Draw connection lines
+    ctx.lineWidth = 0.65;
+    for (let i = 0; i < projected.length; i++) {
+      for (let j = i + 1; j < projected.length; j++) {
+        const p1 = projected[i];
+        const p2 = projected[j];
+        
+        // Calculate 2D distance
+        const dx = p1.x - p2.x;
+        const dy = p1.y - p2.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        
+        if (dist < maxDistance) {
+          // Fade connection lines based on distance and depth
+          const opacity = (1 - dist / maxDistance) * 0.14 * ((p1.scale + p2.scale) / 2);
+          ctx.strokeStyle = `rgba(197, 165, 114, ${opacity})`;
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.stroke();
+        }
+      }
+    }
+
+    // Draw nodes
+    projected.forEach((p) => {
+      // Node opacity based on depth z
+      const opacity = Math.max(0.12, (p.z + 180) / 360) * 0.65;
+      const size = Math.max(1.2, p.scale * 3.5);
+      
+      ctx.fillStyle = `rgba(197, 165, 114, ${opacity})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, size, 0, 2 * Math.PI);
+      ctx.fill();
+    });
+
+    requestAnimationFrame(render);
+  }
+
+  // Handle window resizing
+  window.addEventListener("resize", () => {
+    width = canvas.offsetWidth;
+    height = canvas.offsetHeight;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    ctx.scale(dpr, dpr);
+  });
+
+  render();
+})();

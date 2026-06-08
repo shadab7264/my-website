@@ -1701,3 +1701,36 @@ th {
   transform: translateZ(28px);
   transition: transform 300ms ease;
 }
+
+/* Decorative 3D Rotating Globe Background */
+.hero {
+  position: relative;
+}
+
+.hero-globe-3d {
+  position: absolute;
+  right: -80px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 650px;
+  height: 650px;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.65;
+}
+
+.hero-grid {
+  position: relative;
+  z-index: 2;
+}
+
+@media (max-width: 980px) {
+  .hero-globe-3d {
+    right: 50%;
+    top: 40%;
+    transform: translate(50%, -50%);
+    width: 420px;
+    height: 420px;
+    opacity: 0.35;
+  }
+}

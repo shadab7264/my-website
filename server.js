@@ -1,5 +1,7 @@
 "use strict";
 
+require("dotenv").config();
+
 const nodemailer = require("nodemailer");
 const crypto = require("crypto");
 const fs = require("fs");
@@ -9,10 +11,9 @@ const { URL } = require("url");
 const { createClient } = require("@supabase/supabase-js");
 
 const ROOT_DIR = process.cwd();
-const supabase = createClient(
-  "https://ctprrqxqiwmzcjsacsmn.supabase.co",
-  "sb_publishable_1DEtfIZ7bwt1xNT3gcbBDw_g5HYVNni"
-);
+const SUPABASE_URL = process.env.SUPABASE_URL || "https://ctprrqxqiwmzcjsacsmn.supabase.co";
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || "sb_publishable_1DEtfIZ7bwt1xNT3gcbBDw_g5HYVNni";
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const PUBLIC_DIR = path.join(ROOT_DIR, "public");
 const DEFAULT_DATA_DIR = path.join(ROOT_DIR, "data");
@@ -128,12 +129,38 @@ ensureStore(dataDir);
     return parseMultipart(raw, boundaryMatch[1] || boundaryMatch[2]);
   }
 
-  function saveUploadedMedia(file) {
+  async function saveUploadedMedia(file) {
     if (!file || !file.data.length) return null;
     const media = SUPPORTED_MEDIA[file.contentType];
     if (!media) throw new Error("Upload a JPG, PNG, WEBP, GIF, MP4 or WEBM file.");
     if (file.data.length > MAX_UPLOAD_SIZE) throw new Error("Media file must be smaller than 50 MB.");
     const fileName = `${crypto.randomUUID()}${media.extension}`;
+    
+    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      try {
+        const { data, error } = await supabase.storage
+          .from("media")
+          .upload(fileName, file.data, {
+            contentType: file.contentType,
+            duplex: "half"
+          });
+        if (error) throw error;
+        
+        const { data: publicUrlData } = supabase.storage
+          .from("media")
+          .getPublicUrl(fileName);
+          
+        return {
+          mediaUrl: publicUrlData.publicUrl,
+          mediaType: media.type,
+          mediaName: clean(file.fileName).slice(0, 200)
+        };
+      } catch (storageError) {
+        console.error("Supabase Storage upload failed, falling back to local files:", storageError);
+      }
+    }
+    
+    fs.mkdirSync(uploadsDir, { recursive: true });
     fs.writeFileSync(path.join(uploadsDir, fileName), file.data);
     return {
       mediaUrl: `/media/${fileName}`,
@@ -224,19 +251,49 @@ ensureStore(dataDir);
     }
 
     if (req.method === "GET" && pathname === "/api/content") {
-  const { data: posts, error } = await supabase
-    .from("posts")
-    .select("*")
-    .order("created_at", { ascending: false });
+      const { data: rawPosts, error } = await supabase
+        .from("posts")
+        .select("*")
+        .order("created_at", { ascending: false });
 
-  if (error) {
-    return sendJson(res, 500, { error: error.message });
-  }
+      if (error) {
+        return sendJson(res, 500, { error: error.message });
+      }
 
-  return sendJson(res, 200, { posts });
-}
+      const posts = (rawPosts || []).map(post => ({
+        id: post.id,
+        title: post.title,
+        category: post.category,
+        description: post.description,
+        showApply: post.show_apply,
+        mediaUrl: post.media_url,
+        mediaType: post.media_type,
+        mediaName: post.media_name,
+        createdAt: post.created_at
+      }));
+
+      return sendJson(res, 200, { posts });
+    }
+
     if (req.method === "GET" && pathname === "/api/gallery") {
-      const gallery = readData("gallery.json", []).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      const { data: rawGallery, error } = await supabase
+        .from("gallery")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        return sendJson(res, 500, { error: error.message });
+      }
+
+      const gallery = (rawGallery || []).map(item => ({
+        id: item.id,
+        title: item.title,
+        description: item.description,
+        imageUrl: item.image_url,
+        imageName: item.image_name,
+        createdAt: item.created_at
+      }));
+
       return sendJson(res, 200, { gallery });
     }
 
@@ -383,7 +440,7 @@ if (req.method === "DELETE" && pathname.startsWith("/api/admin/leads/")) {
       const session = requireAdmin(req, res);
       if (!session || !verifyCsrf(req, res, session)) return;
       const { fields: body, file } = await parsePostSubmission(req);
-      const savedMedia = saveUploadedMedia(file);
+      const savedMedia = await saveUploadedMedia(file);
       if (!savedMedia || savedMedia.mediaType !== "image") {
         if (savedMedia) removeMediaFile(savedMedia.mediaUrl, uploadsDir);
         return sendJson(res, 400, { error: "Please upload a gallery image." });
@@ -396,9 +453,31 @@ if (req.method === "DELETE" && pathname.startsWith("/api/admin/leads/")) {
         imageName: savedMedia.mediaName,
         createdAt: new Date().toISOString()
       };
-      const gallery = readData("gallery.json", []);
-      gallery.unshift(item);
-      writeData("gallery.json", gallery);
+      
+      const { error: dbError } = await supabase
+        .from("gallery")
+        .insert([{
+          id: item.id,
+          title: item.title,
+          description: item.description,
+          image_url: item.imageUrl,
+          image_name: item.imageName,
+          created_at: item.createdAt
+        }]);
+
+      if (dbError) {
+        console.error("Supabase gallery insert error:", dbError);
+        return sendJson(res, 500, { error: `Database save failed: ${dbError.message}` });
+      }
+
+      try {
+        const gallery = readData("gallery.json", []);
+        gallery.unshift(item);
+        writeData("gallery.json", gallery);
+      } catch (e) {
+        console.error("Local backup write failed:", e);
+      }
+
       return sendJson(res, 201, { item });
     }
 
@@ -408,62 +487,75 @@ if (req.method === "DELETE" && pathname.startsWith("/api/admin/leads/")) {
       if (!session || !verifyCsrf(req, res, session)) return;
       const gallery = readData("gallery.json", []);
       const removedItem = gallery.find((item) => item.id === galleryMatch[1]);
+      
+      const { error: dbError } = await supabase
+        .from("gallery")
+        .delete()
+        .eq("id", galleryMatch[1]);
+
+      if (dbError) {
+        return sendJson(res, 500, { error: dbError.message });
+      }
+
       const nextGallery = gallery.filter((item) => item.id !== galleryMatch[1]);
-      if (nextGallery.length === gallery.length) return sendJson(res, 404, { error: "Gallery image not found." });
       writeData("gallery.json", nextGallery);
-      if (removedItem.imageUrl) removeMediaFile(removedItem.imageUrl, uploadsDir);
+      if (removedItem && removedItem.imageUrl) removeMediaFile(removedItem.imageUrl, uploadsDir);
       return sendJson(res, 200, { message: "Gallery image deleted." });
     }
 
 
-    
-  const session = requireAdmin(req, res);
-  if (!session || !verifyCsrf(req, res, session)) return;
+    if (req.method === "POST" && pathname === "/api/admin/posts") {
+      const session = requireAdmin(req, res);
+      if (!session || !verifyCsrf(req, res, session)) return;
+      const { fields: body, file } = await parsePostSubmission(req);
+      const savedMedia = await saveUploadedMedia(file);
+      
+      const post = {
+        id: crypto.randomUUID(),
+        title: clean(body.title),
+        category: clean(body.category) || "Guidance",
+        description: clean(body.description),
+        showApply: body.showApply === "on",
+        mediaUrl: savedMedia ? savedMedia.mediaUrl : null,
+        mediaType: savedMedia ? savedMedia.mediaType : null,
+        mediaName: savedMedia ? savedMedia.mediaName : null,
+        createdAt: new Date().toISOString()
+      };
 
-  
-  const { fields: body, file } = await parsePostSubmission(req);
+      if (!post.title || !post.description) {
+        if (savedMedia) removeMediaFile(savedMedia.mediaUrl, uploadsDir);
+        return sendJson(res, 400, { error: "Post title and description are required." });
+      }
 
-if (file) {
-  return sendJson(res, 400, {
-    error: "Image uploads are being migrated. Please create text-only posts for now."
-  });
+      const { error: dbError } = await supabase
+        .from("posts")
+        .insert([{
+          id: post.id,
+          title: post.title,
+          category: post.category,
+          description: post.description,
+          show_apply: post.showApply,
+          media_url: post.mediaUrl,
+          media_type: post.mediaType,
+          media_name: post.mediaName,
+          created_at: post.createdAt
+        }]);
 
+      if (dbError) {
+        console.error("Supabase post insert error:", dbError);
+        return sendJson(res, 500, { error: `Database save failed: ${dbError.message}` });
+      }
 
-}
-if (req.method === "POST" && pathname === "/api/admin/posts") {
-  const session = requireAdmin(req, res);
-  if (!session || !verifyCsrf(req, res, session)) return;
- const { fields: body, file } = await parsePostSubmission(req);
+      try {
+        const posts = readData("posts.json", defaultPosts);
+        posts.unshift(post);
+        writeData("posts.json", posts);
+      } catch (e) {
+        console.error("Local backup write failed:", e);
+      }
 
-console.log("FIELDS:", JSON.stringify(body));
-console.log("TITLE:", body.title);
-console.log("DESCRIPTION:", body.description);
-console.log("FILE:", !!file);
-  const savedMedia = saveUploadedMedia(file);
-  console.log("POST BODY:", body);
-  const post = {
-    id: crypto.randomUUID(),
-    title: clean(body.title),
-    category: clean(body.category) || "Guidance",
-    description: clean(body.description),
-    showApply: body.showApply === "on",
-    ...(savedMedia || {}),
-    createdAt: new Date().toISOString()
-  };
-
-  if (!post.title || !post.description) {
-    if (savedMedia) removeMediaFile(savedMedia.mediaUrl, uploadsDir);
-    return sendJson(res, 400, {
-      error: "Post title and description are required."
-    });
-  }
-
-  const posts = readData("posts.json", defaultPosts);
-  posts.unshift(post);
-  writeData("posts.json", posts);
-
-  return sendJson(res, 201, { post });
-}
+      return sendJson(res, 201, { post });
+    }
 
 const postMatch = pathname.match(/^\/api\/admin\/posts\/([a-zA-Z0-9-]+)$/);
 
