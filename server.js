@@ -15,6 +15,24 @@ const SUPABASE_URL = process.env.SUPABASE_URL || "https://ctprrqxqiwmzcjsacsmn.s
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || "sb_publishable_1DEtfIZ7bwt1xNT3gcbBDw_g5HYVNni";
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
+function isServiceRoleKey(key) {
+  try {
+    if (!key) return false;
+    const parts = key.split('.');
+    if (parts.length !== 3) return false;
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+    return payload.role === 'service_role';
+  } catch {
+    return false;
+  }
+}
+
+if (!isServiceRoleKey(SUPABASE_KEY)) {
+  console.warn("⚠️ WARNING: The Supabase client is NOT initialized with a service_role key. Database write operations will fail due to Row-Level Security (RLS). Please ensure SUPABASE_SERVICE_ROLE_KEY is correctly set in your environment variables.");
+} else {
+  console.log("✅ Supabase client successfully initialized with service_role key (bypasses RLS).");
+}
+
 const PUBLIC_DIR = path.join(ROOT_DIR, "public");
 const DEFAULT_DATA_DIR = path.join(ROOT_DIR, "data");
 const SESSION_MAX_AGE = 8 * 60 * 60 * 1000;
@@ -486,7 +504,11 @@ if (req.method === "DELETE" && pathname.startsWith("/api/admin/leads/")) {
 
       if (dbError) {
         console.error("Supabase gallery insert error:", dbError);
-        return sendJson(res, 500, { error: `Database save failed: ${dbError.message}` });
+        let errorMsg = `Database save failed: ${dbError.message}`;
+        if (!isServiceRoleKey(SUPABASE_KEY)) {
+          errorMsg += " (WARNING: Server is not using a service_role key to bypass RLS. Please check SUPABASE_SERVICE_ROLE_KEY environment variable.)";
+        }
+        return sendJson(res, 500, { error: errorMsg });
       }
 
       try {
@@ -562,7 +584,11 @@ if (req.method === "DELETE" && pathname.startsWith("/api/admin/leads/")) {
 
       if (dbError) {
         console.error("Supabase post insert error:", dbError);
-        return sendJson(res, 500, { error: `Database save failed: ${dbError.message}` });
+        let errorMsg = `Database save failed: ${dbError.message}`;
+        if (!isServiceRoleKey(SUPABASE_KEY)) {
+          errorMsg += " (WARNING: Server is not using a service_role key to bypass RLS. Please check SUPABASE_SERVICE_ROLE_KEY environment variable.)";
+        }
+        return sendJson(res, 500, { error: errorMsg });
       }
 
       try {
