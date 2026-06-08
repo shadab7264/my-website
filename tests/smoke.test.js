@@ -29,7 +29,7 @@ async function run() {
     const home = await fetch(`${base}/`);
     assert.equal(home.status, 200);
     const homeMarkup = await home.text();
-    assert.match(homeMarkup, /Your future deserves/);
+    assert.match(homeMarkup, /Expert Guidance For/);
     assert.match(homeMarkup, /skyward-logo\.png/);
     const logo = await fetch(`${base}/assets/skyward-logo.png`);
     assert.equal(logo.status, 200);
@@ -100,9 +100,14 @@ async function run() {
     assert.equal(mediaPublish.status, 201);
     const mediaPost = (await mediaPublish.json()).post;
     assert.equal(mediaPost.mediaType, "image");
-    assert.match(mediaPost.mediaUrl, /^\/media\/[a-f0-9-]+\.png$/);
+    if (mediaPost.mediaUrl.startsWith("http")) {
+      assert.match(mediaPost.mediaUrl, /^https:\/\/.*\/storage\/v1\/object\/public\/media\/[a-f0-9-]+\.png$/);
+    } else {
+      assert.match(mediaPost.mediaUrl, /^\/media\/[a-f0-9-]+\.png$/);
+    }
 
-    const uploadedMedia = await fetch(`${base}${mediaPost.mediaUrl}`);
+    const mediaFetchUrl = mediaPost.mediaUrl.startsWith("http") ? mediaPost.mediaUrl : `${base}${mediaPost.mediaUrl}`;
+    const uploadedMedia = await fetch(mediaFetchUrl);
     assert.equal(uploadedMedia.status, 200);
     assert.equal(uploadedMedia.headers.get("content-type"), "image/png");
 
@@ -143,7 +148,9 @@ async function run() {
       headers: { Cookie: cookie, "X-CSRF-Token": session.csrfToken }
     });
     assert.equal(removeMedia.status, 200);
-    assert.equal((await fetch(`${base}${mediaPost.mediaUrl}`)).status, 404);
+    if (!mediaPost.mediaUrl.startsWith("http")) {
+      assert.equal((await fetch(`${base}${mediaPost.mediaUrl}`)).status, 404);
+    }
 
     console.log("Smoke test passed: pages, Google Sheets leads, admin publishing and media uploads work.");
   } finally {

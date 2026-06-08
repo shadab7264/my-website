@@ -297,9 +297,7 @@ ensureStore(dataDir);
       return sendJson(res, 200, { gallery });
     }
 
-    if (req.method === "POST" && pathname === "/api/leads") 
-      
-      {
+    if (req.method === "POST" && pathname === "/api/leads") {
       const body = await parseBody(req);
       if (clean(body.website)) return sendJson(res, 201, { message: "Thank you. We will contact you shortly." });
 
@@ -317,43 +315,64 @@ ensureStore(dataDir);
       if (!lead.name || !validEmail(lead.email) || !lead.phone || !lead.service) {
         return sendJson(res, 400, { error: "Please provide your name, valid email, phone number and service." });
       }
-     const { error } = await supabase
-  .from("leads")
-  .insert([{
-    name: lead.name,
-    email: lead.email,
-    phone: lead.phone,
-    destination: lead.destination,
-    service: lead.service,
-    message: lead.message,
-    source: lead.source,
-    created_at: new Date().toISOString()
-  }]);
-  if (!error) {
-  try {
-    transporter.sendMail({
-  from: process.env.GMAIL_USER,
-  to: process.env.GMAIL_USER,
-  subject: "New Lead Received - Skyward Career",
-  html: `
-    <h2>New Lead Received</h2>
-    <p><strong>Name:</strong> ${lead.name}</p>
-    <p><strong>Phone:</strong> ${lead.phone}</p>
-    <p><strong>Email:</strong> ${lead.email}</p>
-    <p><strong>Service:</strong> ${lead.service}</p>
-    <p><strong>Message:</strong> ${lead.message}</p>
-  `
-}).catch(err => console.error("Email failed:", err));
-  } catch (emailError) {
-    console.error("Email failed:", emailError);
-  }
-}
 
-if (error) {
-  return sendJson(res, 500, {
-    error: error.message
-  });
-}
+      const { error: dbError } = await supabase
+        .from("leads")
+        .insert([{
+          name: lead.name,
+          email: lead.email,
+          phone: lead.phone,
+          destination: lead.destination,
+          service: lead.service,
+          message: lead.message,
+          source: lead.source,
+          created_at: lead.createdAt
+        }]);
+
+      if (dbError) {
+        console.error("Supabase leads insert error:", dbError);
+        return sendJson(res, 500, { error: `Database save failed: ${dbError.message}` });
+      }
+
+      try {
+        const leads = readData("leads.json", []);
+        leads.unshift(lead);
+        writeData("leads.json", leads);
+      } catch (e) {
+        console.error("Local leads backup write failed:", e);
+      }
+
+      try {
+        transporter.sendMail({
+          from: process.env.GMAIL_USER,
+          to: process.env.GMAIL_USER,
+          subject: "New Lead Received - Skyward Career",
+          html: `
+            <h2>New Lead Received</h2>
+            <p><strong>Name:</strong> ${lead.name}</p>
+            <p><strong>Phone:</strong> ${lead.phone}</p>
+            <p><strong>Email:</strong> ${lead.email}</p>
+            <p><strong>Service:</strong> ${lead.service}</p>
+            <p><strong>Message:</strong> ${lead.message}</p>
+          `
+        }).catch(err => console.error("Email failed:", err));
+      } catch (emailError) {
+        console.error("Email failed:", emailError);
+      }
+
+      if (googleSheetsWebhookUrl) {
+        syncLeadToGoogleSheet(lead).then((result) => {
+          lead.sheetsStatus = result.status;
+          lead.sheetsSyncedAt = result.syncedAt;
+          try {
+            const currentLeads = readData("leads.json", []);
+            writeData("leads.json", currentLeads.map((l) => (l.id === lead.id ? lead : l)));
+          } catch (e) {
+            console.error("Local leads sync update failed:", e);
+          }
+        }).catch(() => {});
+      }
+
       return sendJson(res, 201, { message: "Thanks! A counsellor will connect with you soon." });
     }
 
@@ -741,4 +760,5 @@ if (require.main === module) {
   });
 }
 
+app.createApp = createApp;
 module.exports = app;
