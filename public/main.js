@@ -2,6 +2,29 @@
 
 document.body.classList.add("motion-ready");
 
+// Dynamic ambient background blobs
+const blobsContainer = document.createElement("div");
+blobsContainer.className = "ambient-blobs-container";
+blobsContainer.innerHTML = `
+  <div class="ambient-blob ambient-blob-1"></div>
+  <div class="ambient-blob ambient-blob-2"></div>
+`;
+document.body.prepend(blobsContainer);
+
+// Floating Header Scroll Effect
+const header = document.querySelector(".site-header");
+if (header) {
+  const handleScroll = () => {
+    if (window.scrollY > 40) {
+      header.classList.add("scrolled");
+    } else {
+      header.classList.remove("scrolled");
+    }
+  };
+  window.addEventListener("scroll", handleScroll, { passive: true });
+  handleScroll(); // Run immediately on load
+}
+
 fetch("/api/content/site")
   .then(res => res.json())
   .then(data => {
