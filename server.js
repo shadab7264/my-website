@@ -186,7 +186,8 @@ ensureStore(dataDir);
           mediaName: clean(file.fileName).slice(0, 200)
         };
       } catch (storageError) {
-        console.error("Supabase Storage upload failed, falling back to local files:", storageError);
+        console.error("Supabase Storage upload failed:", storageError);
+        throw new Error(`Supabase Storage upload failed: ${storageError.message || storageError.statusText || storageError}`);
       }
     }
     
