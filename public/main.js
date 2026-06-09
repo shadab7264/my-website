@@ -275,7 +275,12 @@ if (postsSlideshow) {
   fetch("/api/content")
     .then((response) => response.json())
     .then(({ posts: fetchedPosts }) => {
-      posts = fetchedPosts.slice(0, 6) || [];
+      const sortedPosts = (fetchedPosts || []).sort((a, b) => {
+        if (a.showApply && !b.showApply) return -1;
+        if (!a.showApply && b.showApply) return 1;
+        return 0;
+      });
+      posts = sortedPosts.slice(0, 6);
       if (!posts.length) {
         stage.innerHTML = "<p class=\"muted\">Latest guidance will appear here soon.</p>";
         return;
