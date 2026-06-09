@@ -166,38 +166,32 @@ ensureStore(dataDir);
     if (file.data.length > MAX_UPLOAD_SIZE) throw new Error("Media file must be smaller than 50 MB.");
     const fileName = `${crypto.randomUUID()}${media.extension}`;
     
-    if (SUPABASE_KEY && SUPABASE_KEY !== "sb_publishable_1DEtfIZ7bwt1xNT3gcbBDw_g5HYVNni") {
-      try {
-        const { data, error } = await supabase.storage
-          .from("media")
-          .upload(fileName, file.data, {
-            contentType: file.contentType,
-            duplex: "half"
-          });
-        if (error) throw error;
-        
-        const { data: publicUrlData } = supabase.storage
-          .from("media")
-          .getPublicUrl(fileName);
-          
-        return {
-          mediaUrl: publicUrlData.publicUrl,
-          mediaType: media.type,
-          mediaName: clean(file.fileName).slice(0, 200)
-        };
-      } catch (storageError) {
-        console.error("Supabase Storage upload failed:", storageError);
-        throw new Error(`Supabase Storage upload failed: ${storageError.message || storageError.statusText || storageError}`);
-      }
+    if (!isServiceRoleKey(SUPABASE_KEY)) {
+      throw new Error("Supabase service role key is not configured or is invalid. Please ensure SUPABASE_SERVICE_ROLE_KEY is correctly set in your environment variables to allow media uploads.");
     }
     
-    fs.mkdirSync(uploadsDir, { recursive: true });
-    fs.writeFileSync(path.join(uploadsDir, fileName), file.data);
-    return {
-      mediaUrl: `/media/${fileName}`,
-      mediaType: media.type,
-      mediaName: clean(file.fileName).slice(0, 200)
-    };
+    try {
+      const { data, error } = await supabase.storage
+        .from("media")
+        .upload(fileName, file.data, {
+          contentType: file.contentType,
+          duplex: "half"
+        });
+      if (error) throw error;
+      
+      const { data: publicUrlData } = supabase.storage
+        .from("media")
+        .getPublicUrl(fileName);
+        
+      return {
+        mediaUrl: publicUrlData.publicUrl,
+        mediaType: media.type,
+        mediaName: clean(file.fileName).slice(0, 200)
+      };
+    } catch (storageError) {
+      console.error("Supabase Storage upload failed:", storageError);
+      throw new Error(`Supabase Storage upload failed: ${storageError.message || storageError.statusText || storageError}`);
+    }
   }
 
   function cookiesFrom(req) {
