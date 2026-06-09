@@ -187,91 +187,8 @@ document.querySelectorAll("[data-lead-form]").forEach((form) => {
   });
 });
 
-const postsSlideshow = document.querySelector("[data-posts-slideshow]");
-if (postsSlideshow) {
-  const stage = postsSlideshow.querySelector("[data-posts-stage]");
-  const controls = postsSlideshow.querySelector("[data-posts-controls]");
-  const dotsWrapper = postsSlideshow.querySelector("[data-posts-dots]");
-  const previous = postsSlideshow.querySelector("[data-posts-prev]");
-  const next = postsSlideshow.querySelector("[data-posts-next]");
-  let posts = [];
-  let activeIndex = 0;
-  let timer = null;
-
-  function renderSlide(index) {
-    if (!posts.length) return;
-    activeIndex = (index + posts.length) % posts.length;
-    const post = posts[activeIndex];
-    stage.replaceChildren();
-
-    const article = document.createElement("article");
-    article.className = "post-card";
-
-    const content = document.createElement("div");
-    content.className = "post-content";
-
-    const tag = document.createElement("span");
-    tag.className = "tag";
-    tag.textContent = post.category;
-
-    const title = document.createElement("h3");
-    title.textContent = post.title;
-
-    const description = document.createElement("p");
-    description.textContent = post.description;
-
-    const time = document.createElement("time");
-    time.dateTime = post.createdAt;
-    time.textContent = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium" }).format(new Date(post.createdAt));
-
-    let applyButton = null;
-    if (post.showApply) {
-      applyButton = document.createElement("a");
-      applyButton.href = "#consultation";
-      applyButton.className = "apply-btn";
-      applyButton.textContent = "Apply Now";
-    }
-
-    if (applyButton) {
-      content.append(tag, title, description, applyButton, time);
-    } else {
-      content.append(tag, title, description, time);
-    }
-
-    if (post.mediaUrl) {
-      const media = post.mediaType === "video" ? document.createElement("video") : document.createElement("img");
-      media.className = "post-media admission-ratio";
-      media.src = post.mediaUrl;
-      media.alt = post.mediaType === "image" ? post.title : "";
-      if (post.mediaType === "video") {
-        media.controls = true;
-        media.preload = "metadata";
-      } else {
-        media.loading = "lazy";
-      }
-      article.classList.add("has-media");
-      article.append(media, content);
-    } else {
-      article.append(content);
-    }
-
-    stage.append(article);
-
-    dotsWrapper.querySelectorAll("button").forEach((dot, dotIndex) => {
-      dot.classList.toggle("is-active", dotIndex === activeIndex);
-      dot.setAttribute("aria-selected", String(dotIndex === activeIndex));
-    });
-  }
-
-  function pause() {
-    if (timer) window.clearInterval(timer);
-  }
-
-  function play() {
-    pause();
-    if (!reducedMotion && posts.length > 1) timer = window.setInterval(() => renderSlide(activeIndex + 1), 5000);
-  }
-
+const postsList = document.querySelector("[data-posts-list]");
+if (postsList) {
   fetch("/api/content")
     .then((response) => response.json())
     .then(({ posts: fetchedPosts }) => {
@@ -280,43 +197,73 @@ if (postsSlideshow) {
         if (!a.showApply && b.showApply) return 1;
         return 0;
       });
-      posts = sortedPosts.slice(0, 6);
+      const posts = sortedPosts.slice(0, 6);
       if (!posts.length) {
-        stage.innerHTML = "<p class=\"muted\">Latest guidance will appear here soon.</p>";
+        postsList.innerHTML = "<p class=\"muted\">Latest guidance will appear here soon.</p>";
         return;
       }
-      dotsWrapper.replaceChildren();
-      posts.forEach((item, index) => {
-        const dot = document.createElement("button");
-        dot.className = "slider-dot";
-        dot.type = "button";
-        dot.setAttribute("aria-label", `Show post ${index + 1}`);
-        dot.setAttribute("aria-selected", "false");
-        dot.addEventListener("click", () => {
-          renderSlide(index);
-          play();
-        });
-        dotsWrapper.append(dot);
+      
+      postsList.replaceChildren();
+
+      posts.forEach((post) => {
+        const article = document.createElement("article");
+        article.className = "post-card";
+
+        const content = document.createElement("div");
+        content.className = "post-content";
+
+        const tag = document.createElement("span");
+        tag.className = "tag";
+        tag.textContent = post.category;
+
+        const title = document.createElement("h3");
+        title.textContent = post.title;
+
+        const description = document.createElement("p");
+        description.textContent = post.description;
+
+        const time = document.createElement("time");
+        time.dateTime = post.createdAt;
+        time.textContent = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium" }).format(new Date(post.createdAt));
+
+        let applyButton = null;
+        if (post.showApply) {
+          applyButton = document.createElement("a");
+          applyButton.href = "#consultation";
+          applyButton.className = "apply-btn";
+          applyButton.textContent = "Apply Now";
+        }
+
+        if (applyButton) {
+          content.append(tag, title, description, applyButton, time);
+        } else {
+          content.append(tag, title, description, time);
+        }
+
+        if (post.mediaUrl) {
+          const media = post.mediaType === "video" ? document.createElement("video") : document.createElement("img");
+          media.className = "post-media admission-ratio";
+          media.src = post.mediaUrl;
+          media.alt = post.mediaType === "image" ? post.title : "";
+          if (post.mediaType === "video") {
+            media.controls = true;
+            media.preload = "metadata";
+          } else {
+            media.loading = "lazy";
+          }
+          article.classList.add("has-media");
+          article.append(media, content);
+        } else {
+          article.append(content);
+        }
+
+        postsList.append(article);
       });
-      controls.hidden = posts.length < 2;
-      renderSlide(0);
-      play();
-      addReveal(document.querySelectorAll(".posts-slideshow"));
+      addReveal(document.querySelectorAll(".posts-list"));
     })
     .catch(() => {
-      stage.innerHTML = "<p class=\"muted\">Latest guidance will appear here soon.</p>";
+      postsList.innerHTML = "<p class=\"muted\">Latest guidance will appear here soon.</p>";
     });
-
-  previous.addEventListener("click", () => {
-    renderSlide(activeIndex - 1);
-    play();
-  });
-  next.addEventListener("click", () => {
-    renderSlide(activeIndex + 1);
-    play();
-  });
-  postsSlideshow.addEventListener("mouseenter", pause);
-  postsSlideshow.addEventListener("mouseleave", play);
 }
 
 const gallerySlideshow = document.querySelector("[data-gallery-slideshow]");

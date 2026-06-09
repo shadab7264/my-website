@@ -1870,3 +1870,9 @@ th {
     height: 350px;
   }
 }
+
+.posts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
