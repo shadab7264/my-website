@@ -667,7 +667,7 @@ sendJson(res, 404, { error: "Endpoint not found." });
       if (req.method !== "GET" && req.method !== "HEAD") return sendJson(res, 405, { error: "Method not allowed." });
       serveStatic(res, pathname);
     } catch (error) {
-      const inputError = /(large|format|Upload a|smaller than)/.test(error.message);
+      const inputError = /(large|format|Upload a|smaller than|Supabase)/.test(error.message);
       const status = inputError ? 400 : 500;
       sendJson(res, status, { error: status === 500 ? "Something went wrong. Please try again." : error.message });
     }
