@@ -2,7 +2,7 @@
 
 require("dotenv").config();
 
-const nodemailer = require("nodemailer");
+
 const crypto = require("crypto");
 const fs = require("fs");
 const http = require("http");
@@ -367,23 +367,7 @@ ensureStore(dataDir);
         console.error("Local leads backup write failed:", e);
       }
 
-      try {
-        transporter.sendMail({
-          from: process.env.GMAIL_USER,
-          to: process.env.GMAIL_USER,
-          subject: "New Lead Received - Skyward Career",
-          html: `
-            <h2>New Lead Received</h2>
-            <p><strong>Name:</strong> ${lead.name}</p>
-            <p><strong>Phone:</strong> ${lead.phone}</p>
-            <p><strong>Email:</strong> ${lead.email}</p>
-            <p><strong>Service:</strong> ${lead.service}</p>
-            <p><strong>Message:</strong> ${lead.message}</p>
-          `
-        }).catch(err => console.error("Email failed:", err));
-      } catch (emailError) {
-        console.error("Email failed:", emailError);
-      }
+
 
       if (googleSheetsWebhookUrl) {
         syncLeadToGoogleSheet(lead).then((result) => {
@@ -792,22 +776,7 @@ function sendFile(res, target, status) {
   });
   res.end(contents);
 }
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_SERVER,
-  port: Number(process.env.SMTP_PORT),
-  secure: false,
-  auth: {
-    user: process.env.SMTP_LOGIN,
-    pass: process.env.SMTP_PASSWORD
-  }
-});
-transporter.verify((error, success) => {
-  if (error) {
-    console.error("BREVO SMTP ERROR:", error);
-  } else {
-    console.log("BREVO SMTP READY");
-  }
-});
+
 const app = createApp();
 
 if (require.main === module) {
