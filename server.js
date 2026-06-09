@@ -422,6 +422,37 @@ ensureStore(dataDir);
       return sendJson(res, 200, { authenticated: true, email: session.email, csrfToken: session.csrfToken });
     }
 
+    if (req.method === "GET" && pathname === "/api/admin/debug-env") {
+      const session = requireAdmin(req, res);
+      if (!session) return;
+      
+      const keyExists = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
+      const isSRK = isServiceRoleKey(SUPABASE_KEY);
+      const keyLength = SUPABASE_KEY ? SUPABASE_KEY.length : 0;
+      const keyPrefix = SUPABASE_KEY ? SUPABASE_KEY.slice(0, 10) : "";
+      const keyParts = SUPABASE_KEY ? SUPABASE_KEY.split('.').length : 0;
+      
+      let payloadRole = null;
+      try {
+        const parts = SUPABASE_KEY.split('.');
+        const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+        payloadRole = payload.role;
+      } catch (e) {
+        payloadRole = `Parsing error: ${e.message}`;
+      }
+
+      return sendJson(res, 200, {
+        supabaseUrl: SUPABASE_URL,
+        supabaseKeyExists: keyExists,
+        isServiceRoleKey: isSRK,
+        keyLength,
+        keyParts,
+        keyPrefix,
+        payloadRole,
+        envKeys: Object.keys(process.env).filter(k => k.includes("SUPABASE") || k.includes("KEY"))
+      });
+    }
+
     if (req.method === "POST" && pathname === "/api/admin/logout") {
       const session = requireAdmin(req, res);
       if (!session || !verifyCsrf(req, res, session)) return;
