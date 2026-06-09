@@ -242,7 +242,7 @@ if (postsList) {
 
         if (post.mediaUrl) {
           const media = post.mediaType === "video" ? document.createElement("video") : document.createElement("img");
-          media.className = "post-media admission-ratio";
+          media.className = "post-media";
           media.src = post.mediaUrl;
           media.alt = post.mediaType === "image" ? post.title : "";
           if (post.mediaType === "video") {
