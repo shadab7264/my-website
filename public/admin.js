@@ -210,15 +210,82 @@ document.querySelector("[data-login-form]").addEventListener("submit", async (ev
   }
 });
 
+function compressImage(file, maxWidth = 1200, maxHeight = 1200, quality = 0.8) {
+  return new Promise((resolve) => {
+    if (!file.type.startsWith("image/") || file.type === "image/gif") {
+      return resolve(file);
+    }
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target.result;
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let width = img.width;
+        let height = img.height;
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) return resolve(file);
+            const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, ".jpg"), {
+              type: "image/jpeg",
+              lastModified: Date.now()
+            });
+            resolve(compressedFile);
+          },
+          "image/jpeg",
+          quality
+        );
+      };
+      img.onerror = () => resolve(file);
+    };
+    reader.onerror = () => resolve(file);
+  });
+}
+
 document.querySelector("[data-post-form]").addEventListener("submit", async (event) => {
   event.preventDefault();
   postMessage.classList.remove("error");
-  postMessage.textContent = "Publishing...";
+  postMessage.textContent = "Processing and uploading...";
   const form = event.currentTarget;
   try {
+    const formData = new FormData();
+    formData.append("title", form.querySelector("[name='title']").value);
+    formData.append("category", form.querySelector("[name='category']").value);
+    formData.append("description", form.querySelector("[name='description']").value);
+    if (form.querySelector("[name='showApply']")) {
+      formData.append("showApply", form.querySelector("[name='showApply']").checked ? "on" : "off");
+    }
+    const fileInput = form.querySelector("[name='media']");
+    if (fileInput && fileInput.files && fileInput.files[0]) {
+      const originalFile = fileInput.files[0];
+      if (originalFile.type.startsWith("image/")) {
+        postMessage.textContent = "Optimizing image for fast loading...";
+        const compressedFile = await compressImage(originalFile);
+        formData.append("media", compressedFile);
+      } else {
+        formData.append("media", originalFile);
+      }
+    }
+    postMessage.textContent = "Publishing to website...";
     await request("/api/admin/posts", {
       method: "POST",
-      body: new FormData(form)
+      body: formData
     });
     form.reset();
     postMessage.textContent = "Your post is now live on the homepage.";
@@ -232,12 +299,23 @@ document.querySelector("[data-post-form]").addEventListener("submit", async (eve
 document.querySelector("[data-gallery-form]").addEventListener("submit", async (event) => {
   event.preventDefault();
   galleryMessage.classList.remove("error");
-  galleryMessage.textContent = "Uploading gallery image...";
+  galleryMessage.textContent = "Processing and uploading...";
   const form = event.currentTarget;
   try {
+    const formData = new FormData();
+    formData.append("title", form.querySelector("[name='title']").value);
+    formData.append("description", form.querySelector("[name='description']").value);
+    const fileInput = form.querySelector("[name='media']");
+    if (fileInput && fileInput.files && fileInput.files[0]) {
+      const originalFile = fileInput.files[0];
+      galleryMessage.textContent = "Optimizing image for fast loading...";
+      const compressed = await compressImage(originalFile);
+      formData.append("media", compressed);
+    }
+    galleryMessage.textContent = "Uploading to gallery...";
     await request("/api/admin/gallery", {
       method: "POST",
-      body: new FormData(form)
+      body: formData
     });
     form.reset();
     galleryMessage.textContent = "Gallery image is now live on the homepage.";
