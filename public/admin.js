@@ -141,7 +141,7 @@ function renderLeads(leads, sheetsConfigured) {
     : "Google Sheets setup is required before online syncing.";
   if (!leads.length) {
     const row = document.createElement("tr");
-    row.innerHTML = "<td class=\"empty\" colspan=\"6\">Your new website enquiries will appear here.</td>";
+    row.innerHTML = "<td class=\"empty\" colspan=\"7\">Your new website enquiries will appear here.</td>";
     table.append(row);
     return;
   }
@@ -154,6 +154,25 @@ function renderLeads(leads, sheetsConfigured) {
       cell.style.whiteSpace = "pre-line";
       row.append(cell);
     });
+
+    const actionsCell = document.createElement("td");
+    actionsCell.className = "actions-cell";
+
+    const emailBtn = document.createElement("button");
+    emailBtn.className = "button action-btn email-btn";
+    emailBtn.type = "button";
+    emailBtn.textContent = "Email";
+    emailBtn.addEventListener("click", () => openEmailModal(lead));
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "button danger action-btn delete-btn";
+    deleteBtn.type = "button";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.addEventListener("click", () => deleteLead(lead.id));
+
+    actionsCell.append(emailBtn, deleteBtn);
+    row.append(actionsCell);
+
     table.append(row);
   });
 }
@@ -359,7 +378,86 @@ document.querySelector("[data-logout]").addEventListener("click", async () => {
   }
 });
 
+// Email Modal Elements and Logic
+const emailModal = document.querySelector("[data-email-modal]");
+const emailForm = document.querySelector("[data-email-modal-form]");
+const emailModalMessage = document.querySelector("[data-email-modal-message]");
 
+function openEmailModal(lead) {
+  if (emailModalMessage) {
+    emailModalMessage.classList.remove("error");
+    emailModalMessage.textContent = "";
+  }
+  if (emailForm) {
+    emailForm.reset();
+  }
+  
+  const leadIdInput = document.querySelector("[data-email-lead-id]");
+  const recipientInput = document.querySelector("[data-email-recipient-name]");
+  
+  if (leadIdInput) leadIdInput.value = lead.id;
+  if (recipientInput) recipientInput.value = `${lead.name} <${lead.email}>`;
+  
+  if (emailModal) emailModal.classList.add("visible");
+}
+
+function closeEmailModal() {
+  if (emailModal) emailModal.classList.remove("visible");
+}
+
+document.querySelectorAll("[data-close-email-modal]").forEach((btn) => {
+  btn.addEventListener("click", closeEmailModal);
+});
+
+if (emailForm) {
+  emailForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (emailModalMessage) {
+      emailModalMessage.classList.remove("error");
+      emailModalMessage.textContent = "Sending email...";
+    }
+    
+    const leadId = document.querySelector("[data-email-lead-id]").value;
+    const subject = document.querySelector("#email-subject").value;
+    const message = document.querySelector("#email-message").value;
+    
+    try {
+      await request("/api/admin/leads/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadId, subject, message })
+      });
+      
+      if (emailModalMessage) emailModalMessage.textContent = "Email sent successfully!";
+      setTimeout(() => {
+        closeEmailModal();
+      }, 1500);
+    } catch (error) {
+      if (emailModalMessage) {
+        emailModalMessage.classList.add("error");
+        emailModalMessage.textContent = error.message;
+      }
+    }
+  });
+}
+
+async function deleteLead(id) {
+  if (!confirm("Are you sure you want to delete this lead?")) return;
+  if (syncMessage) {
+    syncMessage.classList.remove("error");
+    syncMessage.textContent = "Deleting lead...";
+  }
+  try {
+    await request(`/api/admin/leads/${encodeURIComponent(id)}`, { method: "DELETE" });
+    if (syncMessage) syncMessage.textContent = "Lead deleted successfully.";
+    await loadDashboard();
+  } catch (error) {
+    if (syncMessage) {
+      syncMessage.classList.add("error");
+      syncMessage.textContent = error.message;
+    }
+  }
+}
 
 request("/api/admin/session")
   .then(showDashboard)

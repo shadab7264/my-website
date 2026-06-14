@@ -9,6 +9,56 @@ const { createApp } = require("../server");
 async function run() {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "skyward-test-"));
   const sheetRequests = [];
+  const db = {
+    posts: [],
+    gallery: [],
+    leads: []
+  };
+
+  const fetchImpl = async (url, options) => {
+    if (url.includes("sheet-webhook")) {
+      sheetRequests.push({ url, payload: JSON.parse(options.body) });
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+
+    if (url.includes("/storage/v1/object/")) {
+      return new Response(JSON.stringify({ path: "mock-path" }), {
+        status: 200,
+        headers: { "Content-Type": "image/png" }
+      });
+    }
+
+    if (url.includes("/rest/v1/")) {
+      const table = url.split("/rest/v1/")[1].split("?")[0];
+      if (options.method === "POST") {
+        const body = JSON.parse(options.body);
+        const rows = Array.isArray(body) ? body : [body];
+        db[table] = [...db[table], ...rows];
+        return new Response(JSON.stringify(rows), { status: 201, headers: { "Content-Type": "application/json" } });
+      }
+      if (options.method === "GET") {
+        return new Response(JSON.stringify(db[table] || []), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (options.method === "DELETE") {
+        const match = url.match(/id=eq\.(.+)/);
+        if (match) {
+          const id = decodeURIComponent(match[1]);
+          db[table] = db[table].filter(row => row.id !== id);
+        }
+        return new Response(JSON.stringify({}), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+    }
+
+    return new Response(JSON.stringify([]), {
+      status: 200,
+      statusText: "OK",
+      headers: { "Content-Type": "application/json" }
+    });
+  };
+
   const server = createApp({
     dataDir,
     adminEmail: "test@skyward.local",
@@ -16,10 +66,12 @@ async function run() {
     sessionSecret: "test-secret-used-only-for-automated-checks",
     googleSheetsWebhookUrl: "https://example.test/sheet-webhook",
     googleSheetsSecret: "sheet-secret",
-    fetchImpl: async (url, options) => {
-      sheetRequests.push({ url, payload: JSON.parse(options.body) });
-      return { ok: true, json: async () => ({ ok: true }) };
-    }
+    emailNotifyAdmin: false,
+    smtpHost: "",
+    smtpPort: "",
+    smtpUser: "",
+    smtpPass: "",
+    fetchImpl
   });
 
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -107,7 +159,7 @@ async function run() {
     }
 
     const mediaFetchUrl = mediaPost.mediaUrl.startsWith("http") ? mediaPost.mediaUrl : `${base}${mediaPost.mediaUrl}`;
-    const uploadedMedia = await fetch(mediaFetchUrl);
+    const uploadedMedia = mediaFetchUrl.startsWith("http") ? await fetchImpl(mediaFetchUrl) : await fetch(mediaFetchUrl);
     assert.equal(uploadedMedia.status, 200);
     assert.equal(uploadedMedia.headers.get("content-type"), "image/png");
 
@@ -136,6 +188,47 @@ async function run() {
     assert.equal(sheetSync.status, 200);
     assert.equal((await sheetSync.json()).synced, 1);
     assert.equal(sheetRequests.length, 2);
+
+    // Test leads mail API (should return 400 SMTP skipped because no SMTP is configured in the test env)
+    const mailResponse = await fetch(`${base}/api/admin/leads/email`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: cookie,
+        "X-CSRF-Token": session.csrfToken
+      },
+      body: JSON.stringify({
+        leadId: leadData.leads[0].id,
+        subject: "Welcome to Skyward",
+        message: "Hello Student Test, we have received your consultation request."
+      })
+    });
+    assert.equal(mailResponse.status, 400);
+    const mailResult = await mailResponse.json();
+    assert.match(mailResult.error, /SMTP is not configured/);
+
+    // Test leads deletion (unauthorized, without csrf, and authorized)
+    const deleteUnauth = await fetch(`${base}/api/admin/leads/${leadData.leads[0].id}`, {
+      method: "DELETE"
+    });
+    assert.equal(deleteUnauth.status, 401);
+
+    const deleteNoCsrf = await fetch(`${base}/api/admin/leads/${leadData.leads[0].id}`, {
+      method: "DELETE",
+      headers: { Cookie: cookie }
+    });
+    assert.equal(deleteNoCsrf.status, 403);
+
+    const deleteSuccess = await fetch(`${base}/api/admin/leads/${leadData.leads[0].id}`, {
+      method: "DELETE",
+      headers: { Cookie: cookie, "X-CSRF-Token": session.csrfToken }
+    });
+    assert.equal(deleteSuccess.status, 200);
+
+    // Verify lead is successfully deleted from leads.json
+    const leadsAfter = await fetch(`${base}/api/admin/leads`, { headers: { Cookie: cookie } });
+    const leadDataAfter = await leadsAfter.json();
+    assert.equal(leadDataAfter.leads.length, 0);
 
     const remove = await fetch(`${base}/api/admin/posts/${newPost.id}`, {
       method: "DELETE",

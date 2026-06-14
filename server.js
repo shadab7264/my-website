@@ -9,6 +9,7 @@ const http = require("http");
 const path = require("path");
 const { URL } = require("url");
 const { createClient } = require("@supabase/supabase-js");
+const nodemailer = require("nodemailer");
 
 const ROOT_DIR = process.cwd();
 const SUPABASE_URL = process.env.SUPABASE_URL || "https://ctprrqxqiwmzcjsacsmn.supabase.co";
@@ -25,7 +26,6 @@ let rawKey = process.env.SUPABASE_SERVICE_ROLE_KEY ||
 rawKey = String(rawKey).trim().replace(/^["']|["']$/g, "");
 
 const SUPABASE_KEY = rawKey;
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 function isServiceRoleKey(key) {
   try {
@@ -90,16 +90,64 @@ const defaultPosts = [
 
 function createApp(options = {}) {
   const dataDir = options.dataDir || process.env.DATA_DIR || DEFAULT_DATA_DIR;
-  const adminEmail = (options.adminEmail || process.env.ADMIN_EMAIL || "admin@skywardeducation.com").toLowerCase();
+  const adminEmail = (options.adminEmail || process.env.ADMIN_EMAIL || "skywardcareerandplacementhub@gmail.com").toLowerCase();
   const adminPassword = options.adminPassword || process.env.ADMIN_PASSWORD || "ChangeMe123!";
   const sessionSecret = options.sessionSecret || process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex");
   const googleSheetsWebhookUrl = options.googleSheetsWebhookUrl || process.env.GOOGLE_SHEETS_WEBHOOK_URL || "";
   const googleSheetsSecret = options.googleSheetsSecret || process.env.GOOGLE_SHEETS_SECRET || "";
   const externalFetch = options.fetchImpl || fetch;
+  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+    auth: { persistSession: false },
+    global: { fetch: externalFetch }
+  });
   const sessions = new Map();
   const uploadsDir = path.join(dataDir, "uploads");
 
-ensureStore(dataDir);
+  // SMTP Settings
+  const smtpHost = options.smtpHost !== undefined ? options.smtpHost : (process.env.SMTP_HOST || "");
+  const smtpPort = options.smtpPort !== undefined ? options.smtpPort : (process.env.SMTP_PORT || "");
+  const smtpUser = options.smtpUser !== undefined ? options.smtpUser : (process.env.SMTP_USER || "");
+  const smtpPass = options.smtpPass !== undefined ? options.smtpPass : (process.env.SMTP_PASS || "");
+  const smtpFrom = options.smtpFrom !== undefined ? options.smtpFrom : (process.env.SMTP_FROM || "");
+  const emailNotifyAdmin = options.emailNotifyAdmin !== undefined ? options.emailNotifyAdmin : (process.env.EMAIL_NOTIFY_ADMIN === "true");
+
+  let transporter = null;
+  if (smtpHost && smtpUser && smtpPass) {
+    transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: Number(smtpPort) || 587,
+      secure: Number(smtpPort) === 465,
+      auth: {
+        user: smtpUser,
+        pass: smtpPass
+      }
+    });
+  } else {
+    console.warn("⚠️ SMTP environment variables are not fully configured. Email notifications/manual emails will be skipped.");
+  }
+
+  async function sendMail({ to, subject, html, text }) {
+    if (!transporter) {
+      console.warn(`⚠️ Skipped sending email to ${to} (SMTP transporter not configured). Subject: ${subject}`);
+      return { status: "skipped", reason: "transporter_not_configured" };
+    }
+    try {
+      const info = await transporter.sendMail({
+        from: smtpFrom || smtpUser,
+        to,
+        subject,
+        text,
+        html
+      });
+      console.log(`✉️ Email successfully sent to ${to}: ${info.messageId}`);
+      return { status: "sent", messageId: info.messageId };
+    } catch (error) {
+      console.error(`❌ Failed to send email to ${to}:`, error);
+      throw error;
+    }
+  }
+
+  ensureStore(dataDir);
   
 
   function sendJson(res, status, payload) {
@@ -382,6 +430,65 @@ ensureStore(dataDir);
         }).catch(() => {});
       }
 
+      if (emailNotifyAdmin) {
+        const subject = `New Consultation Lead: ${lead.name}`;
+        const html = `
+          <h2>New Student Enquiry Received</h2>
+          <p>A new lead has submitted a consultation request on the website.</p>
+          <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; border-color: #eee;">
+            <tr style="background-color: #f9f9f9;"><td><strong>Field</strong></td><td><strong>Value</strong></td></tr>
+            <tr><td><strong>Name</strong></td><td>${lead.name}</td></tr>
+            <tr><td><strong>Email</strong></td><td>${lead.email}</td></tr>
+            <tr><td><strong>Phone</strong></td><td>${lead.phone}</td></tr>
+            <tr><td><strong>Service Needed</strong></td><td>${lead.service}</td></tr>
+            <tr><td><strong>Destination Choice</strong></td><td>${lead.destination || "-"}</td></tr>
+            <tr><td><strong>Message</strong></td><td>${lead.message || "-"}</td></tr>
+            <tr><td><strong>Source</strong></td><td>${lead.source}</td></tr>
+            <tr><td><strong>Received At</strong></td><td>${new Date(lead.createdAt).toLocaleString("en-IN")}</td></tr>
+          </table>
+          <br/>
+          <p>Log in to the admin panel to view details and respond.</p>
+        `;
+        const text = `New Consultation Lead Details:\nName: ${lead.name}\nEmail: ${lead.email}\nPhone: ${lead.phone}\nService: ${lead.service}\nDestination: ${lead.destination}\nMessage: ${lead.message}\nSource: ${lead.source}`;
+
+        sendMail({ to: adminEmail, subject, html, text }).catch((err) => {
+          console.error("Failed to send administrative lead notification:", err);
+        });
+      }
+
+      // Send auto-response email to the student
+      const studentSubject = `Enquiry Received | Skyward Career & Placement Hub`;
+      const studentHtml = `
+        <div style="font-family: 'Outfit', sans-serif; line-height: 1.6; color: #0B1B3D; max-width: 600px; margin: 0 auto; border: 1px solid rgba(10, 25, 47, 0.08); border-radius: 16px; padding: 32px; background-color: #FCFAF7;">
+          <div style="text-align: center; margin-bottom: 24px;">
+            <h2 style="color: #0B1B3D; font-family: 'Playfair Display', serif; margin: 0;">Skyward Career & Placement Hub</h2>
+          </div>
+          <p>Dear ${lead.name},</p>
+          <p>Thank you for reaching out to Skyward Career and Placement Hub! We have successfully received your consultation enquiry.</p>
+          <p>Our expert counsellors are reviewing your details and will get in touch with you shortly to schedule a free assessment session.</p>
+          <div style="background-color: rgba(10, 25, 47, 0.03); border-radius: 12px; padding: 20px; margin: 20px 0; border: 1px solid rgba(10, 25, 47, 0.06);">
+            <h3 style="margin-top: 0; font-size: 16px; color: #0B1B3D;">Your Enquiry Details:</h3>
+            <table cellpadding="4" cellspacing="0" style="font-size: 14px;">
+              <tr><td><strong>Service Needed:</strong></td><td>${lead.service}</td></tr>
+              <tr><td><strong>Destination Choice:</strong></td><td>${lead.destination || "-"}</td></tr>
+            </table>
+          </div>
+          <p>If you have any urgent questions, feel free to reply directly to this email or call us at <strong>+91 9241080063</strong>.</p>
+          <hr style="border: 0; border-top: 1px solid rgba(10, 25, 47, 0.08); margin: 32px 0;" />
+          <p style="font-size: 13px; color: #4F5D73;">
+            Best regards,<br/>
+            <strong>Skyward Career and Placement Hub Counselling Team</strong><br/>
+            Email: hello@skywardeducation.com<br/>
+            Web: <a href="http://localhost:3000">skywardeducation.com</a>
+          </p>
+        </div>
+      `;
+      const studentText = `Dear ${lead.name},\n\nThank you for reaching out to Skyward Career and Placement Hub! We have successfully received your consultation enquiry.\n\nOur counsellors are reviewing your details and will get in touch with you shortly to schedule a free assessment session.\n\nEnquiry Summary:\nService Needed: ${lead.service}\nDestination Choice: ${lead.destination || "-"}\n\nBest regards,\nSkyward Career and Placement Hub Counselling Team`;
+
+      sendMail({ to: lead.email, subject: studentSubject, html: studentHtml, text: studentText }).catch((err) => {
+        console.error("Failed to send student welcome email:", err);
+      });
+
       return sendJson(res, 201, { message: "Thanks! A counsellor will connect with you soon." });
     }
 
@@ -456,6 +563,8 @@ ensureStore(dataDir);
 }
 
 if (req.method === "DELETE" && pathname.startsWith("/api/admin/leads/")) {
+  const session = requireAdmin(req, res);
+  if (!session || !verifyCsrf(req, res, session)) return;
   const id = pathname.split("/").pop();
 
   const { error } = await supabase
@@ -463,11 +572,67 @@ if (req.method === "DELETE" && pathname.startsWith("/api/admin/leads/")) {
     .delete()
     .eq("id", id);
 
+  try {
+    const leads = readData("leads.json", []);
+    const updatedLeads = leads.filter((l) => l.id !== id);
+    writeData("leads.json", updatedLeads);
+  } catch (e) {
+    console.error("Local leads delete failed:", e);
+  }
+
   if (error) {
     return sendJson(res, 400, { error: error.message });
   }
 
   return sendJson(res, 200, { success: true });
+}
+
+if (req.method === "POST" && pathname === "/api/admin/leads/email") {
+  const session = requireAdmin(req, res);
+  if (!session || !verifyCsrf(req, res, session)) return;
+  const body = await parseBody(req);
+  const { leadId, subject, message } = body;
+  if (!leadId || !subject || !message) {
+    return sendJson(res, 400, { error: "Please provide lead ID, subject and message." });
+  }
+
+  const leads = readData("leads.json", []);
+  const lead = leads.find((l) => l.id === leadId);
+  if (!lead) {
+    return sendJson(res, 404, { error: "Lead not found." });
+  }
+
+  try {
+    const result = await sendMail({
+      to: lead.email,
+      subject: subject,
+      html: `
+        <div style="font-family: 'Outfit', sans-serif; line-height: 1.6; color: #0B1B3D; max-width: 600px; margin: 0 auto; border: 1px solid rgba(10, 25, 47, 0.08); border-radius: 16px; padding: 32px; background-color: #FCFAF7;">
+          <div style="text-align: center; margin-bottom: 24px;">
+            <h2 style="color: #0B1B3D; font-family: 'Playfair Display', serif; margin: 0;">Skyward Career & Placement Hub</h2>
+          </div>
+          <p>Dear ${lead.name},</p>
+          <p>${message.replace(/\n/g, "<br>")}</p>
+          <hr style="border: 0; border-top: 1px solid rgba(10, 25, 47, 0.08); margin: 32px 0;" />
+          <p style="font-size: 13px; color: #4F5D73;">
+            Best regards,<br/>
+            <strong>Skyward Career and Placement Hub Counselling Team</strong><br/>
+            Email: hello@skywardeducation.com<br/>
+            Phone: +91 9241080063
+          </p>
+        </div>
+      `,
+      text: `Dear ${lead.name},\n\n${message}\n\nBest regards,\nSkyward Career and Placement Hub Counselling Team\nEmail: hello@skywardeducation.com\nPhone: +91 9241080063`
+    });
+
+    if (result.status === "skipped") {
+      return sendJson(res, 400, { error: "SMTP is not configured on the server. Please verify environment settings." });
+    }
+
+    return sendJson(res, 200, { message: "Email sent successfully." });
+  } catch (err) {
+    return sendJson(res, 500, { error: `Failed to send email: ${err.message || err}` });
+  }
 }
 
 

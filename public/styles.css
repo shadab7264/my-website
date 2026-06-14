@@ -2023,3 +2023,126 @@ th {
   flex-direction: column;
   gap: 32px;
 }
+
+/* Action column styling in table */
+.actions-cell {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.action-btn {
+  min-height: 36px;
+  padding: 6px 14px;
+  font-size: 13px;
+  border-radius: 8px;
+  box-shadow: none;
+  cursor: pointer;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 500;
+  transition: all 200ms ease;
+}
+
+.action-btn.email-btn {
+  background: rgba(197, 165, 114, 0.08);
+  color: var(--gold-dark);
+  border: 1px solid rgba(197, 165, 114, 0.3);
+}
+
+.action-btn.email-btn:hover {
+  background: var(--gold);
+  color: white;
+  border-color: var(--gold);
+  transform: translateY(-1px);
+}
+
+.action-btn.delete-btn {
+  background: rgba(207, 66, 66, 0.06);
+  color: var(--danger);
+  border: 1px solid rgba(207, 66, 66, 0.2);
+}
+
+.action-btn.delete-btn:hover {
+  background: var(--danger);
+  color: white;
+  border-color: var(--danger);
+  transform: translateY(-1px);
+}
+
+/* Glassmorphic Modal Overlay */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 14, 26, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 300ms ease;
+}
+
+.modal-overlay.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.modal-card {
+  width: min(580px, calc(100% - 32px));
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 24px;
+  box-shadow: 0 32px 64px rgba(5, 14, 26, 0.16);
+  padding: 40px;
+  transform: translateY(24px) scale(0.97);
+  transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.modal-overlay.visible .modal-card {
+  transform: translateY(0) scale(1);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 16px;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 26px;
+  font-family: 'Playfair Display', serif;
+  color: var(--navy-deep);
+}
+
+.modal-close-btn {
+  border: 0;
+  background: transparent;
+  font-size: 28px;
+  line-height: 1;
+  color: var(--slate);
+  cursor: pointer;
+  transition: color 200ms ease;
+}
+
+.modal-close-btn:hover {
+  color: var(--navy-deep);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.modal-actions .button {
+  min-height: 44px;
+  padding: 10px 20px;
+}

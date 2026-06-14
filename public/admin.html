@@ -160,7 +160,7 @@
               <div class="table-wrap">
                 <table>
                   <thead>
-                    <tr><th>Student</th><th>Contact</th><th>Service</th><th>Source</th><th>Received</th><th>Sheet</th></tr>
+                    <tr><th>Student</th><th>Contact</th><th>Service</th><th>Source</th><th>Received</th><th>Sheet</th><th>Actions</th></tr>
                   </thead>
                   <tbody data-leads-table></tbody>
                 </table>
@@ -170,5 +170,35 @@
         </section>
       </div>
     </main>
+
+    <!-- Email Modal Overlay -->
+    <div class="modal-overlay" data-email-modal>
+      <div class="modal-card">
+        <div class="modal-header">
+          <h2>Send Email to Student</h2>
+          <button class="modal-close-btn" data-close-email-modal type="button" aria-label="Close modal">&times;</button>
+        </div>
+        <form class="stack-form" data-email-modal-form>
+          <input type="hidden" name="leadId" data-email-lead-id>
+          <div class="field">
+            <label for="email-to">Recipient Student</label>
+            <input id="email-to" type="text" data-email-recipient-name readonly style="background: rgba(10, 25, 47, 0.04); font-weight: 500;">
+          </div>
+          <div class="field">
+            <label for="email-subject">Subject</label>
+            <input id="email-subject" name="subject" required placeholder="e.g. Update regarding your university application selection">
+          </div>
+          <div class="field">
+            <label for="email-message">Message Body</label>
+            <textarea id="email-message" name="message" required placeholder="Write your email response here..."></textarea>
+          </div>
+          <div class="modal-actions">
+            <button class="button outline" data-close-email-modal type="button">Cancel</button>
+            <button class="button gold" type="submit">Send Email</button>
+          </div>
+          <p class="form-message" data-email-modal-message aria-live="polite"></p>
+        </form>
+      </div>
+    </div>
   </body>
 </html>
