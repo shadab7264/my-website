@@ -16,7 +16,8 @@
     "@supabase/supabase-js": "^2.106.2",
     "@vercel/node": "^5.8.4",
     "dotenv": "^17.4.2",
-    "nodemailer": "^8.0.9"
+    "nodemailer": "^8.0.9",
+    "twilio": "^4.19.0"
   }
 
 

@@ -4,6 +4,26 @@ const assert = require("assert");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const Module = require("module");
+
+// Mock twilio module
+const twilioRequests = [];
+const originalRequire = Module.prototype.require;
+Module.prototype.require = function (id) {
+  if (id === "twilio") {
+    const mockTwilio = () => ({
+      messages: {
+        create: async (opts) => {
+          twilioRequests.push(opts);
+          return { sid: "SMmock-sid-12345" };
+        }
+      }
+    });
+    return mockTwilio;
+  }
+  return originalRequire.apply(this, arguments);
+};
+
 const { createApp } = require("../server");
 
 async function run() {
@@ -71,6 +91,10 @@ async function run() {
     smtpPort: "",
     smtpUser: "",
     smtpPass: "",
+    twilioAccountSid: "ACmock-sid",
+    twilioAuthToken: "mock-auth-token",
+    twilioWhatsappFrom: "whatsapp:+14155238886",
+    companyWhatsappNumber: "whatsapp:+919241080063",
     fetchImpl
   });
 
@@ -107,6 +131,13 @@ async function run() {
     assert.equal(sheetRequests.length, 1);
     assert.equal(sheetRequests[0].payload.secret, "sheet-secret");
     assert.equal(sheetRequests[0].payload.lead.name, "Student Test");
+
+    // Verify Twilio WhatsApp request
+    assert.equal(twilioRequests.length, 1);
+    assert.match(twilioRequests[0].body, /New Consultation Lead/);
+    assert.match(twilioRequests[0].body, /Student Test/);
+    assert.equal(twilioRequests[0].from, "whatsapp:+14155238886");
+    assert.equal(twilioRequests[0].to, "whatsapp:+919241080063");
 
     const denied = await fetch(`${base}/api/admin/leads`);
     assert.equal(denied.status, 401);
