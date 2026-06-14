@@ -130,36 +130,32 @@ function createApp(options = {}) {
   // Twilio Settings
   const twilioAccountSid = options.twilioAccountSid !== undefined ? options.twilioAccountSid : (process.env.TWILIO_ACCOUNT_SID || "");
   const twilioAuthToken = options.twilioAuthToken !== undefined ? options.twilioAuthToken : (process.env.TWILIO_AUTH_TOKEN || "");
-  const twilioWhatsappFrom = options.twilioWhatsappFrom !== undefined ? options.twilioWhatsappFrom : (process.env.TWILIO_WHATSAPP_FROM || "");
-  const companyWhatsappNumber = options.companyWhatsappNumber !== undefined ? options.companyWhatsappNumber : (process.env.COMPANY_WHATSAPP_NUMBER || "");
+  const twilioSmsFrom = options.twilioSmsFrom !== undefined ? options.twilioSmsFrom : (process.env.TWILIO_SMS_FROM || "");
+  const companySmsNumber = options.companySmsNumber !== undefined ? options.companySmsNumber : (process.env.COMPANY_SMS_NUMBER || "");
 
   let twilioClient = null;
   if (twilioAccountSid && twilioAccountSid.startsWith("AC") && twilioAuthToken) {
     twilioClient = twilio(twilioAccountSid, twilioAuthToken);
   } else {
-    console.warn("⚠️ Twilio environment variables are not fully configured or are invalid (Account SID must start with 'AC'). WhatsApp alerts will be skipped.");
+    console.warn("⚠️ Twilio environment variables are not fully configured or are invalid (Account SID must start with 'AC'). SMS alerts will be skipped.");
   }
 
-  async function sendWhatsappAlert(messageText) {
-    if (!twilioClient || !twilioWhatsappFrom || !companyWhatsappNumber) {
-      console.warn("⚠️ Skipped sending WhatsApp alert (Twilio client/numbers not configured). Message: " + messageText);
+  async function sendSmsAlert(messageText) {
+    if (!twilioClient || !twilioSmsFrom || !companySmsNumber) {
+      console.warn("⚠️ Skipped sending SMS alert (Twilio client/numbers not configured). Message: " + messageText);
       return { status: "skipped", reason: "twilio_not_configured" };
     }
-    
-    // Auto-prefix "whatsapp:" if missing
-    const fromNumber = twilioWhatsappFrom.startsWith("whatsapp:") ? twilioWhatsappFrom : `whatsapp:${twilioWhatsappFrom}`;
-    const toNumber = companyWhatsappNumber.startsWith("whatsapp:") ? companyWhatsappNumber : `whatsapp:${companyWhatsappNumber}`;
     
     try {
       const response = await twilioClient.messages.create({
         body: messageText,
-        from: fromNumber,
-        to: toNumber
+        from: twilioSmsFrom,
+        to: companySmsNumber
       });
-      console.log(`💬 WhatsApp alert sent successfully! Message SID: ${response.sid}`);
+      console.log(`💬 SMS alert sent successfully! Message SID: ${response.sid}`);
       return { status: "sent", sid: response.sid };
     } catch (error) {
-      console.error("❌ Failed to send WhatsApp alert:", error);
+      console.error("❌ Failed to send SMS alert:", error);
       throw error;
     }
   }
@@ -494,10 +490,10 @@ function createApp(options = {}) {
         });
       }
 
-      // Send automated WhatsApp alert to the company
-      const whatsappText = `🔔 *New Consultation Lead Received!*\n\n*Student Name:* ${lead.name}\n*Email:* ${lead.email}\n*Phone:* ${lead.phone}\n*Service Requested:* ${lead.service}\n*Destination Choice:* ${lead.destination || "Not specified"}\n*Enquiry Source:* ${lead.source}\n\n*Message:*\n"${lead.message || "No additional message"}"`;
-      sendWhatsappAlert(whatsappText).catch((err) => {
-        console.error("Failed to send WhatsApp notification alert:", err);
+      // Send automated SMS alert to the company
+      const smsText = `🔔 New Consultation Lead Received!\n\nStudent Name: ${lead.name}\nEmail: ${lead.email}\nPhone: ${lead.phone}\nService Requested: ${lead.service}\nDestination Choice: ${lead.destination || "Not specified"}\nEnquiry Source: ${lead.source}\n\nMessage:\n"${lead.message || "No additional message"}"`;
+      sendSmsAlert(smsText).catch((err) => {
+        console.error("Failed to send SMS notification alert:", err);
       });
 
       // Send auto-response email to the student

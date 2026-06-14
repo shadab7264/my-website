@@ -93,8 +93,8 @@ async function run() {
     smtpPass: "",
     twilioAccountSid: "ACmock-sid",
     twilioAuthToken: "mock-auth-token",
-    twilioWhatsappFrom: "whatsapp:+14155238886",
-    companyWhatsappNumber: "whatsapp:+919241080063",
+    twilioSmsFrom: "+14155238886",
+    companySmsNumber: "+919241080063",
     fetchImpl
   });
 
@@ -132,12 +132,12 @@ async function run() {
     assert.equal(sheetRequests[0].payload.secret, "sheet-secret");
     assert.equal(sheetRequests[0].payload.lead.name, "Student Test");
 
-    // Verify Twilio WhatsApp request
+    // Verify Twilio SMS request
     assert.equal(twilioRequests.length, 1);
     assert.match(twilioRequests[0].body, /New Consultation Lead/);
     assert.match(twilioRequests[0].body, /Student Test/);
-    assert.equal(twilioRequests[0].from, "whatsapp:+14155238886");
-    assert.equal(twilioRequests[0].to, "whatsapp:+919241080063");
+    assert.equal(twilioRequests[0].from, "+14155238886");
+    assert.equal(twilioRequests[0].to, "+919241080063");
 
     const denied = await fetch(`${base}/api/admin/leads`);
     assert.equal(denied.status, 401);
