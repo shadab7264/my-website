@@ -491,7 +491,7 @@ function createApp(options = {}) {
       }
 
       // Send automated SMS alert to the company
-      const smsText = `🔔 New Consultation Lead Received!\n\nStudent Name: ${lead.name}\nEmail: ${lead.email}\nPhone: ${lead.phone}\nService Requested: ${lead.service}\nDestination Choice: ${lead.destination || "Not specified"}\nEnquiry Source: ${lead.source}\n\nMessage:\n"${lead.message || "No additional message"}"`;
+      const smsText = `New Lead: ${lead.name} (${lead.phone}) for ${lead.service}. Source: ${lead.source}`;
       sendSmsAlert(smsText).catch((err) => {
         console.error("Failed to send SMS notification alert:", err);
       });
