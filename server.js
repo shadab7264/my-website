@@ -134,10 +134,10 @@ function createApp(options = {}) {
   const companyWhatsappNumber = options.companyWhatsappNumber !== undefined ? options.companyWhatsappNumber : (process.env.COMPANY_WHATSAPP_NUMBER || "");
 
   let twilioClient = null;
-  if (twilioAccountSid && twilioAuthToken) {
+  if (twilioAccountSid && twilioAccountSid.startsWith("AC") && twilioAuthToken) {
     twilioClient = twilio(twilioAccountSid, twilioAuthToken);
   } else {
-    console.warn("⚠️ Twilio environment variables are not fully configured. WhatsApp alerts will be skipped.");
+    console.warn("⚠️ Twilio environment variables are not fully configured or are invalid (Account SID must start with 'AC'). WhatsApp alerts will be skipped.");
   }
 
   async function sendWhatsappAlert(messageText) {
