@@ -58,57 +58,236 @@
           </div>
 
           <div class="consult-card" id="consultation" data-tilt>
-            <h2>Start your journey</h2>
-            <p class="muted">Tell us where you want to go. Our team will call you within one business day.</p>
-            <form data-lead-form>
-              <div class="form-grid">
-                <div class="field">
-                  <label for="hero-name">Full name</label>
-                  <input id="hero-name" name="name" required placeholder="Your full name">
+            <div class="consult-tabs">
+              <button type="button" class="consult-tab active" data-tab-target="callback-panel">Quick Callback</button>
+              <button type="button" class="consult-tab" data-tab-target="quiz-panel">Check Eligibility</button>
+            </div>
+
+            <!-- Callback Form Panel (Original Form) -->
+            <div class="consult-panel active" id="callback-panel">
+              <h2>Start your journey</h2>
+              <p class="muted">Tell us where you want to go. Our team will call you within one business day.</p>
+              <form data-lead-form>
+                <div class="form-grid">
+                  <div class="field">
+                    <label for="hero-name">Full name</label>
+                    <input id="hero-name" name="name" required placeholder="Your full name">
+                  </div>
+                  <div class="field">
+                    <label for="hero-phone">Phone number</label>
+                    <input id="hero-phone" name="phone" type="tel" required placeholder="+91 9241080063">
+                  </div>
+                  <div class="field">
+                    <label for="hero-email">Email address</label>
+                    <input id="hero-email" name="email" type="email" required placeholder="you@email.com">
+                  </div>
+                  <div class="field">
+                    <label for="hero-destination">Study destination</label>
+                    <select id="hero-destination" name="destination">
+                      <option value="">Select country</option>
+                      <option>United Kingdom</option>
+                      <option>Canada</option>
+                      <option>Australia</option>
+                      <option>United States</option>
+                      <option>Europe</option>
+                      <option>India</option>
+                    </select>
+                  </div>
+                  <div class="field full">
+                    <label for="hero-service">I need guidance with</label>
+                    <select id="hero-service" name="service" required>
+                      <option value="">Select a service</option>
+                      <option>Study Abroad Counselling</option>
+                      <option>University Admissions</option>
+                      <option>Scholarship Support</option>
+                      <option>Visa Guidance</option>
+                      <option>Career Placement</option>
+                    </select>
+                  </div>
+                  <div class="honeypot" aria-hidden="true">
+                    <label for="hero-website">Website</label>
+                    <input id="hero-website" name="website" tabindex="-1" autocomplete="off">
+                  </div>
                 </div>
-                <div class="field">
-                  <label for="hero-phone">Phone number</label>
-                  <input id="hero-phone" name="phone" type="tel" required placeholder="+91 9241080063">
+                <input type="hidden" name="source" value="Homepage consultation form">
+                <div class="form-foot">
+                  <button class="button gold" type="submit">Request a Callback</button>
+                  <p class="form-message" aria-live="polite"></p>
+                  <div class="fine-print">By submitting, you agree to be contacted about education counselling.</div>
                 </div>
-                <div class="field">
-                  <label for="hero-email">Email address</label>
-                  <input id="hero-email" name="email" type="email" required placeholder="you@email.com">
+              </form>
+            </div>
+
+            <!-- Quiz Form Panel -->
+            <div class="consult-panel" id="quiz-panel">
+              <h2>Eligibility Assessment</h2>
+              <p class="muted">Check your qualification, IELTS/PTE scores, and budget for top universities.</p>
+              
+              <div class="quiz-progress">
+                <div class="quiz-progress-header">
+                  <span>Progress</span>
+                  <span data-quiz-step-indicator>Step 1 of 4</span>
                 </div>
-                <div class="field">
-                  <label for="hero-destination">Study destination</label>
-                  <select id="hero-destination" name="destination">
-                    <option value="">Select country</option>
-                    <option>United Kingdom</option>
-                    <option>Canada</option>
-                    <option>Australia</option>
-                    <option>United States</option>
-                    <option>Europe</option>
-                    <option>India</option>
-                  </select>
-                </div>
-                <div class="field full">
-                  <label for="hero-service">I need guidance with</label>
-                  <select id="hero-service" name="service" required>
-                    <option value="">Select a service</option>
-                    <option>Study Abroad Counselling</option>
-                    <option>University Admissions</option>
-                    <option>Scholarship Support</option>
-                    <option>Visa Guidance</option>
-                    <option>Career Placement</option>
-                  </select>
-                </div>
-                <div class="honeypot" aria-hidden="true">
-                  <label for="hero-website">Website</label>
-                  <input id="hero-website" name="website" tabindex="-1" autocomplete="off">
+                <div class="quiz-progress-bar">
+                  <div class="quiz-progress-fill" data-quiz-progress-fill></div>
                 </div>
               </div>
-              <input type="hidden" name="source" value="Homepage consultation form">
-              <div class="form-foot">
-                <button class="button gold" type="submit">Request a Callback</button>
-                <p class="form-message" aria-live="polite"></p>
-                <div class="fine-print">By submitting, you agree to be contacted about education counselling.</div>
-              </div>
-            </form>
+
+              <form data-quiz-form>
+                <!-- Step 1: Study Intent -->
+                <div class="quiz-step active" data-quiz-step="1">
+                  <label>Where do you plan to study?</label>
+                  <input type="hidden" name="destination" id="quiz-destination" required>
+                  <div class="quiz-options">
+                    <button type="button" class="option-card" data-option-value="United Kingdom" data-input-target="quiz-destination">
+                      <span class="option-card-title">United Kingdom</span>
+                      <span class="option-card-desc">Post-study work visa</span>
+                    </button>
+                    <button type="button" class="option-card" data-option-value="Canada" data-input-target="quiz-destination">
+                      <span class="option-card-title">Canada</span>
+                      <span class="option-card-desc">PGWP pathways</span>
+                    </button>
+                    <button type="button" class="option-card" data-option-value="Australia" data-input-target="quiz-destination">
+                      <span class="option-card-title">Australia</span>
+                      <span class="option-card-desc">High quality standards</span>
+                    </button>
+                    <button type="button" class="option-card" data-option-value="United States" data-input-target="quiz-destination">
+                      <span class="option-card-title">United States</span>
+                      <span class="option-card-desc">Ivy League & STEM OPT</span>
+                    </button>
+                    <button type="button" class="option-card" data-option-value="Europe" data-input-target="quiz-destination">
+                      <span class="option-card-title">Europe</span>
+                      <span class="option-card-desc">Affordable tuition</span>
+                    </button>
+                    <button type="button" class="option-card" data-option-value="India" data-input-target="quiz-destination">
+                      <span class="option-card-title">India</span>
+                      <span class="option-card-desc">Top domestic colleges</span>
+                    </button>
+                  </div>
+
+                  <div class="quiz-nav-buttons">
+                    <button type="button" class="button gold" data-quiz-next>Continue</button>
+                  </div>
+                </div>
+
+                <!-- Step 2: Academic Profile -->
+                <div class="quiz-step" data-quiz-step="2">
+                  <label>Your highest level of qualification?</label>
+                  <input type="hidden" name="qualification" id="quiz-qualification" required>
+                  <div class="quiz-options">
+                    <button type="button" class="option-card" data-option-value="Class 12" data-input-target="quiz-qualification">
+                      <span class="option-card-title">Class 12 / High School</span>
+                      <span class="option-card-desc">Applying for Bachelor's</span>
+                    </button>
+                    <button type="button" class="option-card" data-option-value="Graduate / Bachelor's" data-input-target="quiz-qualification">
+                      <span class="option-card-title">Graduate / Bachelor's</span>
+                      <span class="option-card-desc">Applying for Master's</span>
+                    </button>
+                    <button type="button" class="option-card" data-option-value="Post-Graduate / Master's" data-input-target="quiz-qualification">
+                      <span class="option-card-title">Post-Graduate / Master's</span>
+                      <span class="option-card-desc">Applying for PhD / PGD</span>
+                    </button>
+                    <button type="button" class="option-card" data-option-value="Other" data-input-target="quiz-qualification">
+                      <span class="option-card-title">Other Diploma / Degree</span>
+                      <span class="option-card-desc">Custom assessment</span>
+                    </button>
+                  </div>
+
+                  <label style="margin-top: 18px;">Your recent academic score / GPA?</label>
+                  <input type="hidden" name="gpa" id="quiz-gpa" required>
+                  <div class="quiz-options">
+                    <button type="button" class="option-card" data-option-value="Above 80% / 8.0+ CGPA" data-input-target="quiz-gpa">
+                      <span class="option-card-title">Above 80% (Excellent)</span>
+                    </button>
+                    <button type="button" class="option-card" data-option-value="60% - 80% / 6.0 - 8.0 CGPA" data-input-target="quiz-gpa">
+                      <span class="option-card-title">60% - 80% (First Class)</span>
+                    </button>
+                    <button type="button" class="option-card" data-option-value="50% - 60% / 5.0 - 6.0 CGPA" data-input-target="quiz-gpa">
+                      <span class="option-card-title">50% - 60% (Second Class)</span>
+                    </button>
+                    <button type="button" class="option-card" data-option-value="Below 50%" data-input-target="quiz-gpa">
+                      <span class="option-card-title">Below 50%</span>
+                    </button>
+                  </div>
+
+                  <div class="quiz-nav-buttons">
+                    <button type="button" class="button outline" data-quiz-back>Back</button>
+                    <button type="button" class="button gold" data-quiz-next>Continue</button>
+                  </div>
+                </div>
+
+                <!-- Step 3: English Proficiency & Budget -->
+                <div class="quiz-step" data-quiz-step="3">
+                  <label>English proficiency exam taken / planned?</label>
+                  <input type="hidden" name="english_exam" id="quiz-english-exam" required>
+                  <div class="quiz-options">
+                    <button type="button" class="option-card" data-option-value="IELTS" data-input-target="quiz-english-exam">
+                      <span class="option-card-title">IELTS</span>
+                    </button>
+                    <button type="button" class="option-card" data-option-value="PTE Academic" data-input-target="quiz-english-exam">
+                      <span class="option-card-title">PTE Academic</span>
+                    </button>
+                    <button type="button" class="option-card" data-option-value="TOEFL" data-input-target="quiz-english-exam">
+                      <span class="option-card-title">TOEFL</span>
+                    </button>
+                    <button type="button" class="option-card" data-option-value="None / Awaiting / Waiver" data-input-target="quiz-english-exam">
+                      <span class="option-card-title">None / Waiver</span>
+                    </button>
+                  </div>
+
+                  <label style="margin-top: 18px;">Your annual tuition and living budget?</label>
+                  <input type="hidden" name="budget" id="quiz-budget" required>
+                  <div class="quiz-options">
+                    <button type="button" class="option-card" data-option-value="Below ₹10 Lakhs" data-input-target="quiz-budget">
+                      <span class="option-card-title">Below ₹10 Lakhs</span>
+                    </button>
+                    <button type="button" class="option-card" data-option-value="₹10 Lakhs - ₹20 Lakhs" data-input-target="quiz-budget">
+                      <span class="option-card-title">₹10L - ₹20 Lakhs</span>
+                    </button>
+                    <button type="button" class="option-card" data-option-value="₹20 Lakhs - ₹30 Lakhs" data-input-target="quiz-budget">
+                      <span class="option-card-title">₹20L - ₹30 Lakhs</span>
+                    </button>
+                    <button type="button" class="option-card" data-option-value="₹30 Lakhs+" data-input-target="quiz-budget">
+                      <span class="option-card-title">₹30 Lakhs+</span>
+                    </button>
+                  </div>
+
+                  <div class="quiz-nav-buttons">
+                    <button type="button" class="button outline" data-quiz-back>Back</button>
+                    <button type="button" class="button gold" data-quiz-next>Continue</button>
+                  </div>
+                </div>
+
+                <!-- Step 4: Contact Info -->
+                <div class="quiz-step" data-quiz-step="4">
+                  <label>Where should we send your eligibility results?</label>
+                  <div class="form-grid" style="margin-top: 16px;">
+                    <div class="field full">
+                      <label for="quiz-name">Full name</label>
+                      <input id="quiz-name" name="name" required placeholder="Your full name">
+                    </div>
+                    <div class="field">
+                      <label for="quiz-email">Email address</label>
+                      <input id="quiz-email" name="email" type="email" required placeholder="you@email.com">
+                    </div>
+                    <div class="field">
+                      <label for="quiz-phone">Phone number</label>
+                      <input id="quiz-phone" name="phone" type="tel" required placeholder="+91 9241080063">
+                    </div>
+                    <div class="honeypot" aria-hidden="true">
+                      <label for="quiz-website">Website</label>
+                      <input id="quiz-website" name="website" tabindex="-1" autocomplete="off">
+                    </div>
+                  </div>
+
+                  <div class="quiz-nav-buttons">
+                    <button type="button" class="button outline" data-quiz-back>Back</button>
+                    <button type="submit" class="button gold">Submit & View Results</button>
+                  </div>
+                  <p class="quiz-form-message form-message" aria-live="polite" style="margin-top: 14px;"></p>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       </section>

@@ -210,6 +210,206 @@ document.querySelectorAll("[data-lead-form]").forEach((form) => {
   });
 });
 
+// --- Consult Card Tabs Switching ---
+const tabs = document.querySelectorAll(".consult-tab");
+tabs.forEach((tab) => {
+  tab.addEventListener("click", () => {
+    const targetId = tab.getAttribute("data-tab-target");
+    
+    // Deactivate all tabs & panels
+    tabs.forEach(t => t.classList.remove("active"));
+    document.querySelectorAll(".consult-panel").forEach(p => p.classList.remove("active"));
+    
+    // Activate target
+    tab.classList.add("active");
+    const targetPanel = document.getElementById(targetId);
+    if (targetPanel) targetPanel.classList.add("active");
+  });
+});
+
+// --- Eligibility Quiz Logic ---
+(function initEligibilityQuiz() {
+  const quizForm = document.querySelector("[data-quiz-form]");
+  if (!quizForm) return;
+
+  const steps = Array.from(quizForm.querySelectorAll("[data-quiz-step]"));
+  const stepIndicator = document.querySelector("[data-quiz-step-indicator]");
+  const progressFill = document.querySelector("[data-quiz-progress-fill]");
+  const formMessage = quizForm.querySelector(".quiz-form-message");
+  let currentStep = 1;
+
+  // Handle visual option card clicks
+  const optionCards = quizForm.querySelectorAll(".option-card");
+  optionCards.forEach((card) => {
+    card.addEventListener("click", () => {
+      const inputId = card.getAttribute("data-input-target");
+      const value = card.getAttribute("data-option-value");
+      const hiddenInput = document.getElementById(inputId);
+
+      if (hiddenInput) {
+        hiddenInput.value = value;
+      }
+
+      // Deselect all cards for this specific input target
+      quizForm.querySelectorAll(`.option-card[data-input-target="${inputId}"]`).forEach(c => {
+        c.classList.remove("selected");
+      });
+
+      // Select this card
+      card.classList.add("selected");
+    });
+  });
+
+  // Update Progress Bar
+  function updateProgress() {
+    if (stepIndicator) {
+      stepIndicator.textContent = `Step ${currentStep} of ${steps.length}`;
+    }
+    if (progressFill) {
+      const percent = (currentStep / steps.length) * 100;
+      progressFill.style.width = `${percent}%`;
+    }
+  }
+
+  // Navigation Logic
+  quizForm.querySelectorAll("[data-quiz-next]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const currentStepEl = steps.find(s => Number(s.getAttribute("data-quiz-step")) === currentStep);
+      if (!currentStepEl) return;
+
+      // Validate required hidden inputs in current step
+      const hiddenInputs = Array.from(currentStepEl.querySelectorAll("input[type='hidden'][required]"));
+      const allSelected = hiddenInputs.every(input => input.value.trim() !== "");
+
+      if (!allSelected) {
+        alert("Please select an option before continuing.");
+        return;
+      }
+
+      // Move to next step
+      currentStepEl.classList.remove("active");
+      currentStep++;
+      const nextStepEl = steps.find(s => Number(s.getAttribute("data-quiz-step")) === currentStep);
+      if (nextStepEl) {
+        nextStepEl.classList.add("active");
+      }
+      updateProgress();
+    });
+  });
+
+  quizForm.querySelectorAll("[data-quiz-back]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const currentStepEl = steps.find(s => Number(s.getAttribute("data-quiz-step")) === currentStep);
+      if (!currentStepEl) return;
+
+      // Move to previous step
+      currentStepEl.classList.remove("active");
+      currentStep--;
+      const prevStepEl = steps.find(s => Number(s.getAttribute("data-quiz-step")) === currentStep);
+      if (prevStepEl) {
+        prevStepEl.classList.add("active");
+      }
+      updateProgress();
+    });
+  });
+
+  // Quiz Form Submit Handler
+  quizForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const submitBtn = quizForm.querySelector("button[type='submit']");
+    formMessage.classList.remove("error");
+    formMessage.textContent = "Processing assessment...";
+    submitBtn.disabled = true;
+
+    // Collect all data
+    const name = quizForm.querySelector("#quiz-name").value;
+    const email = quizForm.querySelector("#quiz-email").value;
+    const phone = quizForm.querySelector("#quiz-phone").value;
+    const destination = quizForm.querySelector("#quiz-destination").value;
+    const qualification = quizForm.querySelector("#quiz-qualification").value;
+    const gpa = quizForm.querySelector("#quiz-gpa").value;
+    const englishExam = quizForm.querySelector("#quiz-english-exam").value;
+    const budget = quizForm.querySelector("#quiz-budget").value;
+
+    // Honeypot check
+    const website = quizForm.querySelector("[name='website']").value;
+    if (website) {
+      // Spam submission, silently succeed
+      showQuizResults(name, destination, qualification, gpa, englishExam);
+      return;
+    }
+
+    // Prepare message body
+    const formattedMessage = `Highest Qualification: ${qualification}
+Academic Score / GPA: ${gpa}
+English Exam: ${englishExam}
+Annual Budget: ${budget}
+Intake Preference: 2026 / 2027`;
+
+    const payload = {
+      name,
+      email,
+      phone,
+      destination,
+      service: "Study Abroad Counselling",
+      message: formattedMessage,
+      source: "Eligibility Quiz Form"
+    };
+
+    try {
+      const response = await fetch("/api/leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+
+      // Render beautiful success assessment summary screen
+      showQuizResults(name, destination, qualification, gpa, englishExam);
+    } catch (err) {
+      formMessage.classList.add("error");
+      formMessage.textContent = err.message || "Failed to submit assessment. Please try again.";
+      submitBtn.disabled = false;
+    }
+  });
+
+  function showQuizResults(name, destination, qualification, gpa, englishExam) {
+    const quizPanel = document.getElementById("quiz-panel");
+    quizPanel.replaceChildren();
+
+    const resultsCard = document.createElement("div");
+    resultsCard.className = "quiz-results-card";
+
+    const badge = document.createElement("span");
+    badge.className = "quiz-badge";
+    badge.textContent = "High Match Profile 🌟";
+
+    const heading = document.createElement("h3");
+    heading.textContent = `Congratulations, ${name.split(" ")[0]}!`;
+
+    const description = document.createElement("p");
+    description.innerHTML = `Based on your profile, you are a strong candidate for admission to universities in <strong>${destination}</strong>. We have sent your eligibility score card to our admissions experts.`;
+
+    const summary = document.createElement("div");
+    summary.className = "quiz-results-summary";
+    summary.innerHTML = `
+      <div><strong>Destination:</strong> ${destination}</div>
+      <div><strong>Qualification:</strong> ${qualification}</div>
+      <div><strong>Academic Score:</strong> ${gpa}</div>
+      <div><strong>English Proficiency:</strong> ${englishExam}</div>
+    `;
+
+    const infoText = document.createElement("p");
+    infoText.className = "muted";
+    infoText.style.fontSize = "13px";
+    infoText.textContent = "One of our dedicated career advisors will call you within one business day for a full, free profile assessment and list of eligible programs.";
+
+    resultsCard.append(badge, heading, description, summary, infoText);
+    quizPanel.append(resultsCard);
+  }
+})();
+
 const postsList = document.querySelector("[data-posts-list]");
 if (postsList) {
   fetch("/api/content")

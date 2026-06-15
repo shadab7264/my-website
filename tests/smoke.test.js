@@ -134,7 +134,7 @@ async function run() {
 
     // Verify Twilio SMS request
     assert.equal(twilioRequests.length, 1);
-    assert.match(twilioRequests[0].body, /New Consultation Lead/);
+    assert.match(twilioRequests[0].body, /New Lead/);
     assert.match(twilioRequests[0].body, /Student Test/);
     assert.equal(twilioRequests[0].from, "+14155238886");
     assert.equal(twilioRequests[0].to, "+919241080063");

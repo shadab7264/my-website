@@ -2146,3 +2146,222 @@ th {
   min-height: 44px;
   padding: 10px 20px;
 }
+
+/* --- Interactive Eligibility Quiz & Tab Styles --- */
+.consult-card {
+  padding-top: 24px; /* Adjust padding for tab headers */
+}
+
+/* Tabs */
+.consult-tabs {
+  display: flex;
+  border-bottom: 2px solid var(--line);
+  margin-bottom: 24px;
+  gap: 16px;
+}
+
+.consult-tab {
+  padding: 10px 4px;
+  background: transparent;
+  border: none;
+  font-family: 'Outfit', sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--slate);
+  cursor: pointer;
+  position: relative;
+  transition: color 250ms ease;
+}
+
+.consult-tab:hover {
+  color: var(--navy-deep);
+}
+
+.consult-tab.active {
+  color: var(--gold-dark);
+}
+
+.consult-tab.active::after {
+  content: "";
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--gold-dark);
+  border-radius: 2px;
+}
+
+/* Panel visibility */
+.consult-panel {
+  display: none;
+}
+
+.consult-panel.active {
+  display: block;
+  animation: fadeIn 300ms ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Quiz Steps */
+.quiz-step {
+  display: none;
+}
+
+.quiz-step.active {
+  display: block;
+}
+
+/* Option Cards */
+.quiz-options {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.option-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 18px 12px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 250ms cubic-bezier(0.16, 1, 0.3, 1);
+  font-family: 'Outfit', sans-serif;
+}
+
+.option-card:hover {
+  border-color: var(--gold);
+  background: #ffffff;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(10, 25, 47, 0.04);
+}
+
+.option-card.selected {
+  border-color: var(--gold-dark);
+  background: var(--gold-soft);
+  color: var(--navy-deep);
+  font-weight: 500;
+  box-shadow: 0 8px 20px rgba(197, 165, 114, 0.12);
+}
+
+.option-card-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.option-card-desc {
+  font-size: 11px;
+  color: var(--slate);
+  margin-top: 4px;
+}
+
+/* Progress Bar */
+.quiz-progress {
+  margin-bottom: 24px;
+}
+
+.quiz-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--slate);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.quiz-progress-bar {
+  height: 6px;
+  background: var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.quiz-progress-fill {
+  height: 100%;
+  width: 25%;
+  background: linear-gradient(90deg, var(--gold) 0%, var(--gold-dark) 100%);
+  border-radius: 10px;
+  transition: width 300ms ease;
+}
+
+/* Quiz Navigation Buttons */
+.quiz-nav-buttons {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.quiz-nav-buttons .button {
+  flex: 1;
+}
+
+.quiz-nav-buttons .button.outline {
+  flex: 0.4;
+}
+
+/* Result Screen */
+.quiz-results-card {
+  text-align: center;
+  padding: 16px 8px;
+}
+
+.quiz-badge {
+  display: inline-flex;
+  padding: 6px 16px;
+  background: var(--gold-soft);
+  color: var(--navy-deep);
+  border-radius: 100px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin-bottom: 18px;
+  text-transform: uppercase;
+}
+
+.quiz-results-card h3 {
+  font-size: 24px;
+  color: var(--navy-deep);
+  margin-bottom: 12px;
+}
+
+.quiz-results-card p {
+  font-size: 14px;
+  color: var(--slate);
+  line-height: 1.6;
+}
+
+.quiz-results-summary {
+  background: rgba(10, 25, 47, 0.02);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  padding: 16px;
+  margin: 20px 0;
+  text-align: left;
+}
+
+.quiz-results-summary div {
+  font-size: 13px;
+  margin-bottom: 6px;
+  color: var(--navy);
+}
+
+.quiz-results-summary div strong {
+  color: var(--navy-deep);
+}
+
+.quiz-results-summary div:last-child {
+  margin-bottom: 0;
+}
