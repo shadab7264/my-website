@@ -12,6 +12,130 @@ const { createClient } = require("@supabase/supabase-js");
 const nodemailer = require("nodemailer");
 const twilio = require("twilio");
 
+// --- Security Hardening Helpers & Classes ---
+
+class RateLimiter {
+  constructor(limit, windowMs) {
+    this.limit = limit;
+    this.windowMs = windowMs;
+    this.requests = new Map();
+    // Periodically clean up expired entries to prevent memory exhaustion
+    this.cleanupInterval = setInterval(() => {
+      const now = Date.now();
+      for (const [ip, data] of this.requests.entries()) {
+        if (now > data.resetTime) {
+          this.requests.delete(ip);
+        }
+      }
+    }, 10 * 60 * 1000);
+    if (this.cleanupInterval.unref) {
+      this.cleanupInterval.unref();
+    }
+  }
+
+  isLimitExceeded(ip) {
+    const now = Date.now();
+    const clientData = this.requests.get(ip);
+
+    if (!clientData) {
+      this.requests.set(ip, { count: 1, resetTime: now + this.windowMs });
+      return false;
+    }
+
+    if (now > clientData.resetTime) {
+      clientData.count = 1;
+      clientData.resetTime = now + this.windowMs;
+      return false;
+    }
+
+    clientData.count++;
+    return clientData.count > this.limit;
+  }
+}
+
+function getClientIp(req) {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (forwarded) {
+    return forwarded.split(",")[0].trim();
+  }
+  return req.socket.remoteAddress || "unknown";
+}
+
+class WebApplicationFirewall {
+  static isSuspiciousRequest(req, pathname, bodyBuffer) {
+    const url = decodeURIComponent(req.url || "");
+    const userAgent = String(req.headers["user-agent"] || "").toLowerCase();
+
+    // 1. Path Traversal & Sensitive File Patterns
+    const traversalPatterns = [
+      /\.\.\//,                   // Traversal (../)
+      /%2e%2e/i,                  // URL encoded traversal
+      /\/\.env/i,                 // Environment files
+      /\/\.git/i,                 // Git metadata
+      /wp-admin|wp-login|xmlrpc/i,// WordPress common attack paths
+      /\/(etc|bin|var|win)\//i,   // OS system directories
+      /\.php$/i                   // PHP scripts (unsupported on this server)
+    ];
+
+    for (const pattern of traversalPatterns) {
+      if (pattern.test(url) || pattern.test(pathname)) {
+        console.warn(`[WAF] Blocked traversal/exploit pattern on path: ${url}`);
+        return true;
+      }
+    }
+
+    // 2. Suspicious Automated User Agents / Scanners
+    const maliciousUserAgents = [
+      /nmap/i, /sqlmap/i, /nikto/i, /dirbuster/i, /censys/i, /nessus/i,
+      /hydra/i, /w3af/i, /acunetix/i, /zgrab/i, /gobuster/i
+    ];
+
+    for (const uaPattern of maliciousUserAgents) {
+      if (uaPattern.test(userAgent)) {
+        console.warn(`[WAF] Blocked suspicious automated crawler/scanner user-agent: ${userAgent}`);
+        return true;
+      }
+    }
+
+    // 3. Check Query Parameters for SQLi & XSS
+    const sqliXssPatterns = [
+      /union\s+select/i,
+      /select\s+.*?\s+from/i,
+      /insert\s+into/i,
+      /delete\s+from/i,
+      /drop\s+table/i,
+      /update\s+.*?\s+set/i,
+      /['"`;]\s*or\s*['"`;]?\d+['"`;]?\s*=\s*['"`;]?\d+/i, // e.g., ' or 1=1
+      /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/i, // <script> tags
+      /javascript:\s*alert\s*\(/i,
+      /onload\s*=\s*['"].*?['"]/i,
+      /onerror\s*=\s*['"].*?['"]/i
+    ];
+
+    // Check query params
+    for (const pattern of sqliXssPatterns) {
+      if (pattern.test(url)) {
+        console.warn(`[WAF] Blocked SQLi/XSS pattern in query parameters: ${url}`);
+        return true;
+      }
+    }
+
+    // Check request body if present (passed as string)
+    if (bodyBuffer && bodyBuffer.length > 0) {
+      const bodyString = bodyBuffer.toString("utf8");
+      for (const pattern of sqliXssPatterns) {
+        if (pattern.test(bodyString)) {
+          console.warn(`[WAF] Blocked SQLi/XSS pattern in request body payload: ${bodyString.slice(0, 500)}`);
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+}
+
+
 const ROOT_DIR = process.cwd();
 const SUPABASE_URL = process.env.SUPABASE_URL || "https://ctprrqxqiwmzcjsacsmn.supabase.co";
 
@@ -102,6 +226,21 @@ function createApp(options = {}) {
     global: { fetch: externalFetch }
   });
   const sessions = new Map();
+  // Background session cleanup task
+  const sessionCleanupInterval = setInterval(() => {
+    const now = Date.now();
+    for (const [token, session] of sessions.entries()) {
+      if (session.expiresAt < now) {
+        sessions.delete(token);
+      }
+    }
+  }, 30 * 60 * 1000);
+  if (sessionCleanupInterval.unref) {
+    sessionCleanupInterval.unref();
+  }
+  const globalLimiter = new RateLimiter(100, 60 * 1000);       // 100 requests per minute
+  const loginLimiter = new RateLimiter(5, 15 * 60 * 1000);     // 5 attempts per 15 minutes
+  const leadsLimiter = new RateLimiter(5, 60 * 60 * 1000);     // 5 submissions per hour
   const uploadsDir = path.join(dataDir, "uploads");
 
   // SMTP Settings
@@ -224,7 +363,7 @@ function createApp(options = {}) {
   }
 
   async function parseBody(req) {
-    const raw = (await readBody(req)).toString("utf8");
+    const raw = (req.bodyBuffer || await readBody(req)).toString("utf8");
     try {
       return raw ? JSON.parse(raw) : {};
     } catch {
@@ -237,7 +376,7 @@ function createApp(options = {}) {
     if (!contentType.startsWith("multipart/form-data")) return { fields: await parseBody(req), file: null };
     const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
     if (!boundaryMatch) throw new Error("Invalid upload format.");
-    const raw = await readBody(req, MAX_UPLOAD_SIZE + MAX_BODY_SIZE);
+    const raw = req.bodyBuffer || await readBody(req, MAX_UPLOAD_SIZE + MAX_BODY_SIZE);
     return parseMultipart(raw, boundaryMatch[1] || boundaryMatch[2]);
   }
 
@@ -540,9 +679,10 @@ function createApp(options = {}) {
       const token = crypto.randomBytes(32).toString("hex");
       const csrfToken = crypto.randomBytes(24).toString("hex");
       sessions.set(token, { csrfToken, expiresAt: Date.now() + SESSION_MAX_AGE, email: adminEmail });
+      const isProduction = process.env.NODE_ENV === "production" || !(req.headers.host || "").includes("localhost");
       res.setHeader(
         "Set-Cookie",
-        `skyward_session=${token}.${sign(token)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${SESSION_MAX_AGE / 1000}`
+        `skyward_session=${token}.${sign(token)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${SESSION_MAX_AGE / 1000}${isProduction ? "; Secure" : ""}`
       );
       return sendJson(res, 200, { email: adminEmail, csrfToken });
     }
@@ -869,6 +1009,7 @@ sendJson(res, 404, { error: "Endpoint not found." });
   }
 
   return http.createServer(async (req, res) => {
+    // Basic Security Headers
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "DENY");
     res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
@@ -876,12 +1017,57 @@ sendJson(res, 404, { error: "Endpoint not found." });
       "Content-Security-Policy",
       "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'self' https:; connect-src 'self'; form-action 'self'; base-uri 'self'; frame-ancestors 'none'; upgrade-insecure-requests;"
     );
+    res.setHeader("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
+    res.setHeader("Permissions-Policy", "geolocation=(), camera=(), microphone=(), interest-cohort=()");
+
     const pathname = new URL(req.url, "http://localhost").pathname;
     
     if (req.headers['x-forwarded-proto'] && req.headers['x-forwarded-proto'] !== 'https') {
       res.writeHead(301, { 'Location': `https://${req.headers.host}${req.url}` });
       return res.end();
     }
+
+    const ip = getClientIp(req);
+
+    // 1. Global Rate Limiter
+    if (globalLimiter.isLimitExceeded(ip)) {
+      console.warn(`[RateLimit] Global limit exceeded for IP: ${ip}`);
+      return sendJson(res, 429, { error: "Too many requests. Please try again later." });
+    }
+
+    // Read body buffer globally if POST/PUT
+    let bodyBuffer = null;
+    if (req.method === "POST" || req.method === "PUT") {
+      try {
+        const isUpload = pathname.startsWith("/api/admin/posts") || pathname.startsWith("/api/admin/gallery");
+        bodyBuffer = await readBody(req, isUpload ? MAX_UPLOAD_SIZE + MAX_BODY_SIZE : MAX_BODY_SIZE);
+        req.bodyBuffer = bodyBuffer; // Store on request for parser use
+      } catch (err) {
+        return sendJson(res, 400, { error: err.message });
+      }
+    }
+
+    // 2. Web Application Firewall (WAF) checks
+    if (WebApplicationFirewall.isSuspiciousRequest(req, pathname, bodyBuffer)) {
+      console.warn(`[WAF] Rejection triggered for IP: ${ip} on path: ${pathname}`);
+      return sendJson(res, 403, { error: "Forbidden: Suspicious request detected." });
+    }
+
+    // 3. Specific Endpoint Rate Limits
+    if (pathname === "/api/admin/login" && req.method === "POST") {
+      if (loginLimiter.isLimitExceeded(ip)) {
+        console.warn(`[RateLimit] Login limit exceeded for IP: ${ip}`);
+        return sendJson(res, 429, { error: "Too many login attempts. Please try again in 15 minutes." });
+      }
+    }
+
+    if (pathname === "/api/leads" && req.method === "POST") {
+      if (leadsLimiter.isLimitExceeded(ip)) {
+        console.warn(`[RateLimit] Leads limit exceeded for IP: ${ip}`);
+        return sendJson(res, 429, { error: "Too many form submissions. Please try again in an hour." });
+      }
+    }
+
     try {
       if (pathname.startsWith("/api/")) return await handleApi(req, res, pathname);
       if (req.method !== "GET" && req.method !== "HEAD") return sendJson(res, 405, { error: "Method not allowed." });
