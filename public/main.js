@@ -39,6 +39,73 @@ fetch("/api/content/site")
   })
   .catch(err => console.error("Failed to load site content", err));
 
+fetch("/api/jobs?limit=3&is_featured=true")
+  .then(res => res.json())
+  .then(data => {
+    const featuredContainer = document.querySelector("[data-featured-jobs]");
+    if (!featuredContainer) return;
+    
+    if (!data.jobs || data.jobs.length === 0) {
+      featuredContainer.innerHTML = '<p class="muted">No featured jobs available right now.</p>';
+      return;
+    }
+    
+    featuredContainer.innerHTML = '';
+    data.jobs.forEach(job => {
+      const formatSal = (min, max) => {
+        if (!min && !max) return "Not Disclosed";
+        if (min && !max) return `₹${(min/100000).toFixed(1)} LPA+`;
+        if (!min && max) return `Up to ₹${(max/100000).toFixed(1)} LPA`;
+        return `₹${(min/100000).toFixed(1)} - ${(max/100000).toFixed(1)} LPA`;
+      };
+      
+      const formatExp = (min, max) => {
+        if (!min && !max) return "Any Experience";
+        if (min === 0 && max === 0) return "Fresher";
+        if (min && !max) return `${min}+ Years`;
+        if (!min && max) return `Up to ${max} Years`;
+        return `${min}-${max} Years`;
+      };
+
+      const card = document.createElement("a");
+      card.className = "job-card featured";
+      card.href = `/jobs/${job.slug}`;
+
+      let logoHtml = '';
+      if (job.company_logo_url) {
+        logoHtml = `<img src="${job.company_logo_url}" alt="${job.company_name} logo" class="job-card-logo">`;
+      } else {
+        const initial = job.company_name.charAt(0).toUpperCase();
+        logoHtml = `<div class="job-card-logo-placeholder">${initial}</div>`;
+      }
+
+      card.innerHTML = `
+        <div class="job-card-header">
+          ${logoHtml}
+          <div>
+            <h3 class="job-card-title">${job.title}</h3>
+            <p class="job-card-company">${job.company_name}</p>
+          </div>
+        </div>
+        <div class="job-card-tags">
+          <span class="job-tag location">📍 ${job.location}</span>
+          <span class="job-tag salary">💰 ${formatSal(job.salary_min, job.salary_max)}</span>
+          <span class="job-tag experience">👨‍💻 ${formatExp(job.experience_min, job.experience_max)}</span>
+        </div>
+        <div class="job-card-footer">
+          <span class="job-date">Posted ${new Date(job.created_at).toLocaleDateString('en-IN', {day: 'numeric', month: 'short'})}</span>
+          <span class="button sm outline">Apply Now</span>
+        </div>
+      `;
+      featuredContainer.appendChild(card);
+    });
+  })
+  .catch(err => {
+    console.error("Failed to load featured jobs", err);
+    const featuredContainer = document.querySelector("[data-featured-jobs]");
+    if (featuredContainer) featuredContainer.innerHTML = '<p class="error">Failed to load jobs.</p>';
+  });
+
 const typingElement = document.querySelector("[data-typing-text]");
 if (typingElement) {
   const words = [

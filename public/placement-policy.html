@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Placement Policy | Skyward Career and Placement Hub</title>
+    <link rel="icon" type="image/png" href="/assets/skyward-logo.png">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container header-row">
+        <a href="/" class="brand"><img src="/assets/skyward-logo.png" alt="Skyward"></a>
+        <nav class="main-nav">
+          <a href="/">Home</a>
+          <a href="/jobs">Jobs</a>
+          <a href="/about">About Us</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="legal-page">
+      <div class="container" style="max-width: 800px; padding: 60px 20px;">
+        <h1>Placement Policy</h1>
+        <div id="policy-content" class="prose mt-4">
+          <p class="muted">Loading policy...</p>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      fetch('/api/placement/policy')
+        .then(res => res.json())
+        .then(data => {
+          document.getElementById('policy-content').innerHTML = data.content ? 
+            `<div style="white-space: pre-wrap;">${data.content}</div>` : 
+            '<p>No policy defined yet.</p>';
+        })
+        .catch(() => {
+          document.getElementById('policy-content').innerHTML = '<p class="error">Failed to load policy.</p>';
+        });
+    </script>
+  </body>
+</html>

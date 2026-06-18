@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Placement Terms & Conditions | Skyward Career and Placement Hub</title>
+    <link rel="icon" type="image/png" href="/assets/skyward-logo.png">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container header-row">
+        <a href="/" class="brand"><img src="/assets/skyward-logo.png" alt="Skyward"></a>
+        <nav class="main-nav">
+          <a href="/">Home</a>
+          <a href="/jobs">Jobs</a>
+          <a href="/about">About Us</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="legal-page">
+      <div class="container" style="max-width: 800px; padding: 60px 20px;">
+        <h1>Placement Terms & Conditions</h1>
+        <div id="terms-content" class="prose mt-4">
+          <p class="muted">Loading terms...</p>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      fetch('/api/placement/terms')
+        .then(res => res.json())
+        .then(data => {
+          document.getElementById('terms-content').innerHTML = data.content ? 
+            `<div style="white-space: pre-wrap;">${data.content}</div>` : 
+            '<p>No terms defined yet.</p>';
+        })
+        .catch(() => {
+          document.getElementById('terms-content').innerHTML = '<p class="error">Failed to load terms.</p>';
+        });
+    </script>
+  </body>
+</html>

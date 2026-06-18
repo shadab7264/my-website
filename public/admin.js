@@ -36,7 +36,18 @@ function showLogin() {
 
 async function loadDashboard() {
   try {
-    const [content, enquiryData, galleryData, siteContentData] = await Promise.all([request("/api/content"), request("/api/admin/leads"), request("/api/gallery"), request("/api/content/site")]);
+    const [content, enquiryData, galleryData, siteContentData, jobsData, appsData, analyticsData, categoriesData, termsData, policyData] = await Promise.all([
+      request("/api/content"), 
+      request("/api/admin/leads"), 
+      request("/api/gallery"), 
+      request("/api/content/site"),
+      request("/api/admin/jobs"),
+      request("/api/admin/applications"),
+      request("/api/admin/job-analytics"),
+      request("/api/job-categories"),
+      request("/api/placement/terms"),
+      request("/api/placement/policy")
+    ]);
     
     const siteContent = siteContentData.content || {};
     const titleInput = document.querySelector("#content-heroTitle");
@@ -52,10 +63,48 @@ async function loadDashboard() {
     renderPosts(content.posts);
     renderLeads(enquiryData.leads, enquiryData.sheetsConfigured);
     renderGallery(galleryData.gallery);
+
+    // Job Portal specific rendering
+    renderJobs(jobsData.jobs || []);
+    renderApplications(appsData.applications || []);
+    updateJobAnalytics(analyticsData);
+    populateCategoriesSelect(categoriesData.categories || []);
+
+    const termsInput = document.querySelector("#settings-terms");
+    const policyInput = document.querySelector("#settings-policy");
+    if (termsInput) termsInput.value = termsData.content || "";
+    if (policyInput) policyInput.value = policyData.content || "";
+
   } catch (error) {
     if (error.message.includes("log in")) showLogin();
   }
 }
+
+// Tab Switching
+document.querySelectorAll(".dashboard-tabs .button").forEach(btn => {
+  btn.addEventListener("click", (e) => {
+    document.querySelectorAll(".dashboard-tabs .button").forEach(b => b.classList.remove("active"));
+    e.target.classList.add("active");
+
+    const tab = e.target.dataset.tab;
+    const contentStats = document.getElementById("content-stats");
+    const jobsStats = document.getElementById("jobs-stats");
+    const contentGrid = document.getElementById("content-grid");
+    const jobsGrid = document.getElementById("jobs-grid");
+
+    if (tab === "content") {
+      contentStats.classList.remove("hidden");
+      contentGrid.classList.remove("hidden");
+      jobsStats.classList.add("hidden");
+      jobsGrid.classList.add("hidden");
+    } else if (tab === "jobs") {
+      contentStats.classList.add("hidden");
+      contentGrid.classList.add("hidden");
+      jobsStats.classList.remove("hidden");
+      jobsGrid.classList.remove("hidden");
+    }
+  });
+});
 
 function renderPosts(posts) {
   const wrapper = document.querySelector("[data-admin-posts]");
@@ -174,6 +223,351 @@ function renderLeads(leads, sheetsConfigured) {
     row.append(actionsCell);
 
     table.append(row);
+  });
+}
+
+function updateJobAnalytics(data) {
+  document.querySelector("[data-active-jobs]").textContent = `${data.activeJobs} / ${data.totalJobs}`;
+  document.querySelector("[data-total-apps]").textContent = data.totalApplications;
+  document.querySelector("[data-conversion-rate]").textContent = data.conversionRate;
+}
+
+function populateCategoriesSelect(categories) {
+  const select = document.getElementById("job-cat");
+  if (!select) return;
+  select.innerHTML = '<option value="">Select Category</option>';
+  categories.forEach(cat => {
+    const opt = document.createElement("option");
+    opt.value = cat.id;
+    opt.textContent = cat.name;
+    select.appendChild(opt);
+  });
+}
+
+function renderJobs(jobs) {
+  const table = document.querySelector("[data-jobs-table]");
+  if (!table) return;
+  table.replaceChildren();
+
+  if (!jobs.length) {
+    const row = document.createElement("tr");
+    row.innerHTML = "<td class=\"empty\" colspan=\"6\">No jobs published yet.</td>";
+    table.append(row);
+    return;
+  }
+
+  jobs.forEach((job) => {
+    const row = document.createElement("tr");
+    
+    // Status Badge
+    let statusClass = "status-badge ";
+    if (!job.is_active) statusClass += "bg-gray";
+    else if (job.is_featured) statusClass += "bg-gold";
+    else statusClass += "bg-blue";
+    
+    let statusText = !job.is_active ? "Closed" : (job.is_featured ? "Featured" : "Active");
+
+    [
+      job.title, 
+      job.company_name, 
+      job.location, 
+      shortDate(job.created_at), 
+    ].forEach((value) => {
+      const cell = document.createElement("td");
+      cell.textContent = value || "-";
+      row.append(cell);
+    });
+
+    const statusCell = document.createElement("td");
+    statusCell.innerHTML = `<span class="${statusClass}">${statusText}</span>`;
+    row.append(statusCell);
+
+    const actionsCell = document.createElement("td");
+    actionsCell.className = "actions-cell";
+
+    const toggleBtn = document.createElement("button");
+    toggleBtn.className = "button sm outline action-btn";
+    toggleBtn.type = "button";
+    toggleBtn.textContent = job.is_active ? "Close Job" : "Re-open";
+    toggleBtn.addEventListener("click", () => toggleJob(job.id, !job.is_active, job.is_featured));
+
+    const featureBtn = document.createElement("button");
+    featureBtn.className = "button sm outline action-btn";
+    featureBtn.type = "button";
+    featureBtn.textContent = job.is_featured ? "Unfeature" : "Feature";
+    featureBtn.addEventListener("click", () => toggleJob(job.id, job.is_active, !job.is_featured));
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "button sm danger action-btn";
+    deleteBtn.type = "button";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.addEventListener("click", () => deleteJob(job.id));
+
+    actionsCell.append(toggleBtn, featureBtn, deleteBtn);
+    row.append(actionsCell);
+
+    table.append(row);
+  });
+}
+
+function renderApplications(apps) {
+  const table = document.querySelector("[data-apps-table]");
+  if (!table) return;
+  table.replaceChildren();
+
+  if (!apps.length) {
+    const row = document.createElement("tr");
+    row.innerHTML = "<td class=\"empty\" colspan=\"6\">No applications received yet.</td>";
+    table.append(row);
+    return;
+  }
+
+  apps.forEach((app) => {
+    const row = document.createElement("tr");
+    
+    // Status Badge
+    let statusClass = "status-badge ";
+    switch(app.status) {
+      case "New": statusClass += "bg-blue"; break;
+      case "Shortlisted": statusClass += "bg-gold"; break;
+      case "Interview Scheduled": statusClass += "bg-purple"; break;
+      case "Selected": statusClass += "bg-green"; break;
+      case "Joined": statusClass += "bg-dark-green"; break;
+      case "Rejected": statusClass += "bg-red"; break;
+      default: statusClass += "bg-gray";
+    }
+
+    const jobTitle = app.jobs ? app.jobs.title : "Unknown Job";
+    
+    [
+      app.application_id,
+      `${app.full_name}\n${app.mobile}`,
+      jobTitle,
+      shortDate(app.created_at)
+    ].forEach((value) => {
+      const cell = document.createElement("td");
+      cell.textContent = value || "-";
+      cell.style.whiteSpace = "pre-line";
+      row.append(cell);
+    });
+
+    const statusCell = document.createElement("td");
+    statusCell.innerHTML = `<span class="${statusClass}">${app.status}</span>`;
+    row.append(statusCell);
+
+    const actionsCell = document.createElement("td");
+    actionsCell.className = "actions-cell";
+
+    const viewBtn = document.createElement("button");
+    viewBtn.className = "button sm gold action-btn";
+    viewBtn.type = "button";
+    viewBtn.textContent = "View";
+    viewBtn.addEventListener("click", () => openAppDetailModal(app));
+
+    if (app.resume_url) {
+      const resumeBtn = document.createElement("a");
+      resumeBtn.className = "button sm outline action-btn";
+      resumeBtn.href = app.resume_url;
+      resumeBtn.target = "_blank";
+      resumeBtn.textContent = "Resume";
+      actionsCell.append(viewBtn, resumeBtn);
+    } else {
+      actionsCell.append(viewBtn);
+    }
+
+    row.append(actionsCell);
+    table.append(row);
+  });
+}
+
+// App Detail Modal
+const appDetailModal = document.querySelector("[data-app-detail-modal]");
+let currentViewingAppId = null;
+
+function openAppDetailModal(app) {
+  currentViewingAppId = app.id;
+  document.getElementById("detail-app-id").textContent = app.application_id;
+  document.getElementById("app-status-select").value = app.status;
+  
+  const content = document.getElementById("app-detail-content");
+  
+  const renderRow = (label, value) => `<div style="margin-bottom: 0.5rem;"><strong>${label}:</strong> ${value || '-'}</div>`;
+  
+  content.innerHTML = `
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+      <div>
+        <h3 style="margin-bottom: 0.5rem; font-size: 1rem;">Candidate Info</h3>
+        ${renderRow("Name", app.full_name)}
+        ${renderRow("Email", `<a href="mailto:${app.email}">${app.email}</a>`)}
+        ${renderRow("Mobile", app.mobile)}
+        ${renderRow("WhatsApp", app.whatsapp)}
+        ${renderRow("Location", app.current_location)}
+        ${renderRow("Gender", app.gender)}
+        ${renderRow("DOB", app.dob)}
+      </div>
+      <div>
+        <h3 style="margin-bottom: 0.5rem; font-size: 1rem;">Education</h3>
+        ${renderRow("Qualification", app.highest_qualification)}
+        ${renderRow("Course", app.course_name)}
+        ${renderRow("College", app.college)}
+        ${renderRow("Passing Year", app.passing_year)}
+        ${renderRow("Percentage/CGPA", app.percentage)}
+      </div>
+    </div>
+    
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+      <div>
+        <h3 style="margin-bottom: 0.5rem; font-size: 1rem;">Professional</h3>
+        ${renderRow("Status", app.employment_status)}
+        ${app.employment_status === 'Experienced' ? `
+          ${renderRow("Total Exp", app.total_experience)}
+          ${renderRow("Current Co.", app.current_company)}
+          ${renderRow("Designation", app.current_designation)}
+          ${renderRow("Current Sal", app.current_salary)}
+          ${renderRow("Expected Sal", app.expected_salary)}
+          ${renderRow("Notice Period", app.notice_period)}
+        ` : ''}
+      </div>
+      <div>
+        <h3 style="margin-bottom: 0.5rem; font-size: 1rem;">Additional</h3>
+        ${renderRow("Skills", app.skills)}
+        ${renderRow("Certifications", app.certifications)}
+        ${renderRow("LinkedIn", app.linkedin_url ? `<a href="${app.linkedin_url}" target="_blank">View Profile</a>` : '-')}
+        ${renderRow("Portfolio", app.portfolio_url ? `<a href="${app.portfolio_url}" target="_blank">View Site</a>` : '-')}
+      </div>
+    </div>
+    
+    ${app.cover_letter ? `
+      <div style="margin-bottom: 1.5rem;">
+        <h3 style="margin-bottom: 0.5rem; font-size: 1rem;">Cover Letter</h3>
+        <p style="white-space: pre-wrap; font-size: 0.9rem; background: rgba(0,0,0,0.02); padding: 1rem; border-radius: 4px;">${app.cover_letter}</p>
+      </div>
+    ` : ''}
+  `;
+  
+  appDetailModal.classList.add("visible");
+}
+
+document.querySelectorAll("[data-close-app-modal]").forEach(btn => {
+  btn.addEventListener("click", () => appDetailModal.classList.remove("visible"));
+});
+
+document.getElementById("save-app-status")?.addEventListener("click", async () => {
+  if (!currentViewingAppId) return;
+  const newStatus = document.getElementById("app-status-select").value;
+  try {
+    await request(`/api/admin/applications/${currentViewingAppId}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: newStatus })
+    });
+    appDetailModal.classList.remove("visible");
+    await loadDashboard();
+  } catch (err) {
+    alert("Failed to update status: " + err.message);
+  }
+});
+
+async function toggleJob(id, isActive, isFeatured) {
+  try {
+    await request(`/api/admin/jobs/${id}/toggle`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ is_active: isActive, is_featured: isFeatured })
+    });
+    await loadDashboard();
+  } catch (err) {
+    alert("Failed to update job: " + err.message);
+  }
+}
+
+async function deleteJob(id) {
+  if (!confirm("Are you sure you want to delete this job? This will also delete all associated applications.")) return;
+  try {
+    await request(`/api/admin/jobs/${id}`, { method: "DELETE" });
+    await loadDashboard();
+  } catch (err) {
+    alert("Failed to delete job: " + err.message);
+  }
+}
+
+// Job Form Submission
+const jobForm = document.querySelector("[data-job-form]");
+const jobMessage = document.querySelector("[data-job-message]");
+if (jobForm) {
+  jobForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    jobMessage.classList.remove("error");
+    jobMessage.textContent = "Publishing job...";
+    const btn = jobForm.querySelector("button[type='submit']");
+    btn.disabled = true;
+
+    try {
+      const formData = new FormData(jobForm);
+      const fileInput = jobForm.querySelector("[name='media']");
+      if (fileInput && fileInput.files[0]) {
+        jobMessage.textContent = "Optimizing company logo...";
+        const compressed = await compressImage(fileInput.files[0]);
+        formData.set("media", compressed);
+      }
+
+      await request("/api/admin/jobs", {
+        method: "POST",
+        body: formData
+      });
+      jobForm.reset();
+      jobMessage.textContent = "Job published successfully!";
+      await loadDashboard();
+    } catch (err) {
+      jobMessage.classList.add("error");
+      jobMessage.textContent = err.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
+// Settings Forms
+const termsForm = document.querySelector("[data-terms-form]");
+const policyForm = document.querySelector("[data-policy-form]");
+
+if (termsForm) {
+  termsForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const msg = document.querySelector("[data-terms-message]");
+    msg.classList.remove("error");
+    msg.textContent = "Saving...";
+    try {
+      await request("/api/admin/placement/terms", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: termsForm.querySelector("textarea").value })
+      });
+      msg.textContent = "Terms saved successfully.";
+    } catch (err) {
+      msg.classList.add("error");
+      msg.textContent = err.message;
+    }
+  });
+}
+
+if (policyForm) {
+  policyForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const msg = document.querySelector("[data-policy-message]");
+    msg.classList.remove("error");
+    msg.textContent = "Saving...";
+    try {
+      await request("/api/admin/placement/policy", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: policyForm.querySelector("textarea").value })
+      });
+      msg.textContent = "Policy saved successfully.";
+    } catch (err) {
+      msg.classList.add("error");
+      msg.textContent = err.message;
+    }
   });
 }
 

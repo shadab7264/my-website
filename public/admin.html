@@ -43,17 +43,26 @@
               <h1>Content &amp; enquiries</h1>
               <p class="muted">Signed in as <span data-admin-email></span></p>
             </div>
-           
+            <div class="dashboard-tabs">
+              <button class="button outline active" type="button" data-tab="content">Content & Leads</button>
+              <button class="button outline" type="button" data-tab="jobs">Jobs & Applications</button>
+            </div>
             <button class="button outline" type="button" data-logout>Log Out</button>
           </div>
 
-          <div class="dashboard-stats">
+          <div class="dashboard-stats" id="content-stats">
             <div class="dashboard-stat"><span>Total Leads</span><strong data-lead-count>0</strong></div>
             <div class="dashboard-stat"><span>Published Posts</span><strong data-post-count>0</strong></div>
             <div class="dashboard-stat"><span>Latest Enquiry</span><strong data-latest-date>-</strong></div>
           </div>
+          
+          <div class="dashboard-stats hidden" id="jobs-stats">
+            <div class="dashboard-stat"><span>Active Jobs</span><strong data-active-jobs>0</strong></div>
+            <div class="dashboard-stat"><span>Applications</span><strong data-total-apps>0</strong></div>
+            <div class="dashboard-stat"><span>Conversion Rate</span><strong data-conversion-rate>0%</strong></div>
+          </div>
 
-          <div class="admin-grid">
+          <div class="admin-grid" id="content-grid">
             <section class="panel">
               <h2>Publish content</h2>
               <form class="stack-form" data-post-form>
@@ -167,6 +176,165 @@
               </div>
             </section>
           </div>
+
+          <!-- Jobs Grid (Hidden by default) -->
+          <div class="admin-grid hidden" id="jobs-grid">
+            <section class="panel wide">
+              <div class="panel-head">
+                <div>
+                  <h2>Post a New Job</h2>
+                  <p class="muted">Publish career opportunities to the Jobs portal.</p>
+                </div>
+              </div>
+              <form class="stack-form job-form" data-job-form>
+                <div class="form-grid">
+                  <div class="field">
+                    <label for="job-title">Job Title *</label>
+                    <input id="job-title" name="title" required placeholder="e.g. Senior Marketing Manager">
+                  </div>
+                  <div class="field">
+                    <label for="job-company">Company Name *</label>
+                    <input id="job-company" name="company_name" required placeholder="e.g. TechCorp India">
+                  </div>
+                  <div class="field">
+                    <label for="job-logo">Company Logo</label>
+                    <input id="job-logo" class="file-input" name="media" type="file" accept="image/jpeg,image/png,image/webp">
+                  </div>
+                  <div class="field">
+                    <label for="job-location">Location</label>
+                    <input id="job-location" name="location" placeholder="e.g. Bangalore, India">
+                  </div>
+                  <div class="field">
+                    <label for="job-cat">Category</label>
+                    <select id="job-cat" name="category_id">
+                      <option value="">Select Category</option>
+                      <!-- Populated by JS -->
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="job-type">Employment Type</label>
+                    <select id="job-type" name="employment_type">
+                      <option value="Full-Time">Full-Time</option>
+                      <option value="Part-Time">Part-Time</option>
+                      <option value="Internship">Internship</option>
+                      <option value="Contract">Contract</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="job-mode">Work Mode</label>
+                    <select id="job-mode" name="work_mode">
+                      <option value="Work From Office">Work From Office</option>
+                      <option value="Hybrid">Hybrid</option>
+                      <option value="Remote">Remote</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="job-level">Target Audience</label>
+                    <select id="job-level" name="experience_level">
+                      <option value="Both">Both (Freshers & Experienced)</option>
+                      <option value="Fresher">Freshers Only</option>
+                      <option value="Experienced">Experienced Only</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="job-sal-min">Min Salary (LPA)</label>
+                    <input type="number" id="job-sal-min" name="salary_min" placeholder="e.g. 300000">
+                  </div>
+                  <div class="field">
+                    <label for="job-sal-max">Max Salary (LPA)</label>
+                    <input type="number" id="job-sal-max" name="salary_max" placeholder="e.g. 500000">
+                  </div>
+                  <div class="field">
+                    <label for="job-exp-min">Min Experience (Years)</label>
+                    <input type="number" id="job-exp-min" name="experience_min" placeholder="0">
+                  </div>
+                  <div class="field">
+                    <label for="job-exp-max">Max Experience (Years)</label>
+                    <input type="number" id="job-exp-max" name="experience_max" placeholder="2">
+                  </div>
+                  <div class="field">
+                    <label for="job-openings">No. of Openings</label>
+                    <input type="number" id="job-openings" name="openings" value="1">
+                  </div>
+                  <div class="field">
+                    <label for="job-skills">Skills Required (Comma separated)</label>
+                    <input id="job-skills" name="skills_required" placeholder="Java, SQL, React">
+                  </div>
+                  <div class="field full-width">
+                    <label for="job-desc">Job Description *</label>
+                    <textarea id="job-desc" name="description" required rows="6" placeholder="Full job description..."></textarea>
+                  </div>
+                  <div class="field">
+                    <label class="checkbox-field">
+                      <input type="checkbox" name="is_featured"> Highlight as Featured Job
+                    </label>
+                  </div>
+                </div>
+                <button class="button gold" type="submit">Publish Job</button>
+                <p class="form-message" data-job-message aria-live="polite"></p>
+              </form>
+            </section>
+
+            <section class="panel wide">
+              <div class="panel-head">
+                <div>
+                  <h2>Published Jobs</h2>
+                  <p class="muted">Manage existing job postings.</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr><th>Role</th><th>Company</th><th>Location</th><th>Posted</th><th>Status</th><th>Actions</th></tr>
+                  </thead>
+                  <tbody data-jobs-table></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="panel wide">
+              <div class="panel-head">
+                <div>
+                  <h2>Job Applications</h2>
+                  <p class="muted">Review and update candidate applications.</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr><th>App ID</th><th>Candidate</th><th>Job</th><th>Applied</th><th>Status</th><th>Actions</th></tr>
+                  </thead>
+                  <tbody data-apps-table></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="panel wide">
+              <div class="panel-head">
+                <div>
+                  <h2>Placement Settings</h2>
+                  <p class="muted">Update policies shown to candidates during application.</p>
+                </div>
+              </div>
+              <form class="stack-form" data-terms-form>
+                <div class="field">
+                  <label for="settings-terms">Terms & Conditions</label>
+                  <textarea id="settings-terms" name="content" rows="6"></textarea>
+                </div>
+                <button class="button gold" type="submit">Save Terms</button>
+                <p class="form-message" data-terms-message aria-live="polite"></p>
+              </form>
+              <form class="stack-form mt-4" data-policy-form>
+                <div class="field">
+                  <label for="settings-policy">Placement Policy</label>
+                  <textarea id="settings-policy" name="content" rows="6"></textarea>
+                </div>
+                <button class="button gold" type="submit">Save Policy</button>
+                <p class="form-message" data-policy-message aria-live="polite"></p>
+              </form>
+            </section>
+
+          </div>
         </section>
       </div>
     </main>
@@ -198,6 +366,36 @@
           </div>
           <p class="form-message" data-email-modal-message aria-live="polite"></p>
         </form>
+      </div>
+    </div>
+    <!-- Application Detail Modal Overlay -->
+    <div class="modal-overlay" data-app-detail-modal>
+      <div class="modal-card large-modal">
+        <div class="modal-header">
+          <div>
+            <h2>Application Details</h2>
+            <p class="muted" id="detail-app-id"></p>
+          </div>
+          <button class="modal-close-btn" data-close-app-modal type="button" aria-label="Close">&times;</button>
+        </div>
+        <div class="app-detail-content" id="app-detail-content">
+          <!-- Populated by JS -->
+        </div>
+        <div class="modal-actions" style="justify-content: space-between; align-items: center; border-top: 1px solid rgba(0,0,0,0.1); padding-top: 1rem;">
+          <div>
+            <label for="app-status-select" style="font-size: 0.875rem; font-weight: 500;">Update Status:</label>
+            <select id="app-status-select" style="margin-left: 0.5rem; padding: 0.25rem; border-radius: 4px;">
+              <option value="New">New</option>
+              <option value="Shortlisted">Shortlisted</option>
+              <option value="Interview Scheduled">Interview Scheduled</option>
+              <option value="Selected">Selected</option>
+              <option value="Joined">Joined</option>
+              <option value="Rejected">Rejected</option>
+            </select>
+            <button class="button sm outline" id="save-app-status">Save</button>
+          </div>
+          <button class="button outline" data-close-app-modal type="button">Close</button>
+        </div>
       </div>
     </div>
   </body>

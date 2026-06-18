@@ -175,6 +175,7 @@ const DEFAULT_DATA_DIR = path.join(ROOT_DIR, "data");
 const SESSION_MAX_AGE = 8 * 60 * 60 * 1000;
 const MAX_BODY_SIZE = 1024 * 1024;
 const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
+const MAX_RESUME_SIZE = 10 * 1024 * 1024;
 
 
 const SUPPORTED_MEDIA = {
@@ -184,6 +185,12 @@ const SUPPORTED_MEDIA = {
   "image/gif": { extension: ".gif", type: "image" },
   "video/mp4": { extension: ".mp4", type: "video" },
   "video/webm": { extension: ".webm", type: "video" }
+};
+
+const SUPPORTED_DOCUMENTS = {
+  "application/pdf": { extension: ".pdf", type: "document" },
+  "application/msword": { extension: ".doc", type: "document" },
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": { extension: ".docx", type: "document" }
 };
 
 const defaultPosts = [
@@ -241,6 +248,7 @@ function createApp(options = {}) {
   const globalLimiter = new RateLimiter(100, 60 * 1000);       // 100 requests per minute
   const loginLimiter = new RateLimiter(5, 15 * 60 * 1000);     // 5 attempts per 15 minutes
   const leadsLimiter = new RateLimiter(5, 60 * 60 * 1000);     // 5 submissions per hour
+  const applyLimiter = new RateLimiter(15, 60 * 60 * 1000);     // 15 applications per hour
   const uploadsDir = path.join(dataDir, "uploads");
 
   // SMTP Settings
@@ -413,6 +421,70 @@ function createApp(options = {}) {
       console.error("Supabase Storage upload failed:", storageError);
       throw new Error(`Supabase Storage upload failed: ${storageError.message || storageError.statusText || storageError}`);
     }
+  }
+
+  async function saveUploadedResume(file) {
+    if (!file || !file.data.length) return null;
+    const doc = SUPPORTED_DOCUMENTS[file.contentType];
+    if (!doc) throw new Error("Upload a PDF, DOC, or DOCX file.");
+    if (file.data.length > MAX_RESUME_SIZE) throw new Error("Resume must be smaller than 10 MB.");
+    const fileName = `${crypto.randomUUID()}${doc.extension}`;
+    if (!isServiceRoleKey(SUPABASE_KEY)) {
+      throw new Error("Supabase service role key is not configured. Resume upload failed.");
+    }
+    const { data, error } = await supabase.storage
+      .from("resumes")
+      .upload(fileName, file.data, { contentType: file.contentType, duplex: "half" });
+    if (error) throw new Error(`Resume upload failed: ${error.message}`);
+    const { data: publicUrlData } = supabase.storage.from("resumes").getPublicUrl(fileName);
+    return { resumeUrl: publicUrlData.publicUrl, resumeName: clean(file.fileName).slice(0, 200) };
+  }
+
+  async function generateApplicationId() {
+    const year = new Date().getFullYear();
+    const { count, error } = await supabase
+      .from("job_applications")
+      .select("*", { count: "exact", head: true });
+    const nextNum = (error ? 0 : (count || 0)) + 1;
+    return `SKY-${year}-${String(nextNum).padStart(4, "0")}`;
+  }
+
+  function slugify(text) {
+    return String(text).toLowerCase().trim()
+      .replace(/[^\w\s-]/g, "").replace(/[\s_]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "")
+      .slice(0, 120);
+  }
+
+  function parseMultipartFiles(buffer, boundary) {
+    const delimiter = Buffer.from(`--${boundary}`);
+    const parts = [];
+    let start = buffer.indexOf(delimiter) + delimiter.length;
+    while (start >= delimiter.length) {
+      if (buffer.subarray(start, start + 2).toString() === "--") break;
+      if (buffer.subarray(start, start + 2).toString() === "\r\n") start += 2;
+      const end = buffer.indexOf(delimiter, start);
+      if (end === -1) break;
+      parts.push(buffer.subarray(start, end - 2));
+      start = end + delimiter.length;
+    }
+    const fields = {};
+    const files = {};
+    for (const part of parts) {
+      const separator = part.indexOf(Buffer.from("\r\n\r\n"));
+      if (separator === -1) continue;
+      const headers = part.subarray(0, separator).toString("utf8");
+      const data = part.subarray(separator + 4);
+      const name = headers.match(/name="([^"]+)"/i)?.[1];
+      const fileName = headers.match(/filename="([^"]*)"/i)?.[1];
+      if (!name) continue;
+      if (fileName) {
+        const contentType = headers.match(/content-type:\s*([^\r\n]+)/i)?.[1].trim().toLowerCase();
+        files[name] = { fileName, contentType, data };
+      } else {
+        fields[name] = data.toString("utf8");
+      }
+    }
+    return { fields, files };
   }
 
   function cookiesFrom(req) {
@@ -989,7 +1061,466 @@ if (req.method === "DELETE" && postMatch) {
   });
 }
 
-sendJson(res, 404, { error: "Endpoint not found." });
+    // ==================== JOB PORTAL API ROUTES ====================
+
+    // --- Public: List jobs with search/filter ---
+    if (req.method === "GET" && pathname === "/api/jobs") {
+      const url = new URL(req.url, "http://localhost");
+      const q = (url.searchParams.get("q") || "").trim().toLowerCase();
+      const company = (url.searchParams.get("company") || "").trim().toLowerCase();
+      const loc = (url.searchParams.get("location") || "").trim().toLowerCase();
+      const categorySlug = url.searchParams.get("category") || "";
+      const salaryMin = parseInt(url.searchParams.get("salaryMin")) || 0;
+      const salaryMax = parseInt(url.searchParams.get("salaryMax")) || 0;
+      const empType = url.searchParams.get("type") || "";
+      const workMode = url.searchParams.get("mode") || "";
+      const level = url.searchParams.get("level") || "";
+      const page = Math.max(1, parseInt(url.searchParams.get("page")) || 1);
+      const limit = Math.min(50, Math.max(1, parseInt(url.searchParams.get("limit")) || 12));
+      const offset = (page - 1) * limit;
+
+      let query = supabase
+        .from("jobs")
+        .select("*, job_categories(name, slug)", { count: "exact" })
+        .eq("is_active", true)
+        .order("is_featured", { ascending: false })
+        .order("created_at", { ascending: false });
+
+      if (empType) query = query.eq("employment_type", empType);
+      if (workMode) query = query.eq("work_mode", workMode);
+      if (level && level !== "Both") query = query.or(`experience_level.eq.${level},experience_level.eq.Both`);
+      if (salaryMin > 0) query = query.gte("salary_max", salaryMin);
+      if (salaryMax > 0) query = query.lte("salary_min", salaryMax);
+
+      query = query.range(offset, offset + limit - 1);
+
+      const { data: jobs, error, count } = await query;
+      if (error) return sendJson(res, 500, { error: error.message });
+
+      let filtered = jobs || [];
+      if (q) filtered = filtered.filter(j => j.title.toLowerCase().includes(q) || (j.description || "").toLowerCase().includes(q) || (j.skills_required || []).some(s => s.toLowerCase().includes(q)));
+      if (company) filtered = filtered.filter(j => j.company_name.toLowerCase().includes(company));
+      if (loc) filtered = filtered.filter(j => j.location.toLowerCase().includes(loc));
+      if (categorySlug) filtered = filtered.filter(j => j.job_categories && j.job_categories.slug === categorySlug);
+
+      return sendJson(res, 200, { jobs: filtered, total: count || 0, page, limit });
+    }
+
+    // --- Public: Get single job by slug ---
+    const jobSlugMatch = pathname.match(/^\/api\/jobs\/([a-z0-9-]+)$/);
+    if (req.method === "GET" && jobSlugMatch && !pathname.includes("/apply")) {
+      const slug = jobSlugMatch[1];
+      const { data: job, error } = await supabase
+        .from("jobs")
+        .select("*, job_categories(name, slug)")
+        .eq("slug", slug)
+        .eq("is_active", true)
+        .single();
+      if (error || !job) return sendJson(res, 404, { error: "Job not found." });
+      return sendJson(res, 200, { job });
+    }
+
+    // --- Public: Get job categories ---
+    if (req.method === "GET" && pathname === "/api/job-categories") {
+      const { data, error } = await supabase
+        .from("job_categories")
+        .select("*")
+        .order("name");
+      if (error) return sendJson(res, 500, { error: error.message });
+      return sendJson(res, 200, { categories: data || [] });
+    }
+
+    // --- Public: Submit job application ---
+    const applyMatch = pathname.match(/^\/api\/jobs\/([a-zA-Z0-9-]+)\/apply$/);
+    if (req.method === "POST" && applyMatch) {
+      const jobId = applyMatch[1];
+      const contentType = req.headers["content-type"] || "";
+      if (!contentType.startsWith("multipart/form-data")) {
+        return sendJson(res, 400, { error: "Invalid request format. Multipart form data required." });
+      }
+      const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
+      if (!boundaryMatch) return sendJson(res, 400, { error: "Invalid upload format." });
+      const raw = req.bodyBuffer || await readBody(req, MAX_RESUME_SIZE + MAX_BODY_SIZE);
+      const { fields, files } = parseMultipartFiles(raw, boundaryMatch[1] || boundaryMatch[2]);
+
+      // Honeypot
+      if (clean(fields.website)) return sendJson(res, 201, { message: "Application submitted successfully.", applicationId: "SKY-0000-0000" });
+
+      // Validate required fields
+      const fullName = clean(fields.full_name);
+      const mobile = clean(fields.mobile);
+      const email = clean(fields.email);
+      const highestQualification = clean(fields.highest_qualification);
+      const employmentStatus = clean(fields.employment_status) || "Fresher";
+
+      if (!fullName || !mobile || !email || !highestQualification) {
+        return sendJson(res, 400, { error: "Please provide your name, mobile, email and qualification." });
+      }
+      if (!validEmail(email)) return sendJson(res, 400, { error: "Please provide a valid email address." });
+
+      // Check terms accepted
+      if (fields.terms_accepted !== "true" && fields.terms_accepted !== "on") {
+        return sendJson(res, 400, { error: "You must accept the placement terms and conditions." });
+      }
+
+      // Verify job exists
+      const { data: jobCheck, error: jobCheckErr } = await supabase
+        .from("jobs").select("id, title, company_name").eq("id", jobId).eq("is_active", true).single();
+      if (jobCheckErr || !jobCheck) return sendJson(res, 404, { error: "This job is no longer available." });
+
+      // Upload resume
+      let resumeData = null;
+      if (fields.uploaded_resume_url && fields.uploaded_resume_name) {
+        resumeData = {
+          resumeUrl: fields.uploaded_resume_url,
+          resumeName: fields.uploaded_resume_name
+        };
+      } else if (files.resume) {
+        resumeData = await saveUploadedResume(files.resume);
+      }
+
+      // Upload company logo for application if needed (not used here)
+      const applicationId = await generateApplicationId();
+      const clientIp = getClientIp(req);
+
+      const application = {
+        application_id: applicationId,
+        job_id: jobId,
+        full_name: fullName,
+        mobile: mobile,
+        whatsapp: clean(fields.whatsapp),
+        email: email,
+        gender: clean(fields.gender),
+        dob: fields.dob || null,
+        current_location: clean(fields.current_location),
+        highest_qualification: highestQualification,
+        course_name: clean(fields.course_name),
+        college: clean(fields.college),
+        passing_year: parseInt(fields.passing_year) || null,
+        percentage: parseFloat(fields.percentage) || null,
+        employment_status: employmentStatus,
+        current_company: employmentStatus === "Experienced" ? clean(fields.current_company) : null,
+        previous_company: employmentStatus === "Experienced" ? clean(fields.previous_company) : null,
+        total_experience: employmentStatus === "Experienced" ? clean(fields.total_experience) : null,
+        current_salary: employmentStatus === "Experienced" ? clean(fields.current_salary) : null,
+        expected_salary: employmentStatus === "Experienced" ? clean(fields.expected_salary) : null,
+        notice_period: employmentStatus === "Experienced" ? clean(fields.notice_period) : null,
+        current_designation: employmentStatus === "Experienced" ? clean(fields.current_designation) : null,
+        resume_url: resumeData ? resumeData.resumeUrl : null,
+        resume_name: resumeData ? resumeData.resumeName : null,
+        skills: clean(fields.skills),
+        certifications: clean(fields.certifications),
+        linkedin_url: clean(fields.linkedin_url),
+        portfolio_url: clean(fields.portfolio_url),
+        cover_letter: clean(fields.cover_letter),
+        terms_accepted: true,
+        terms_accepted_at: new Date().toISOString(),
+        applicant_ip: clientIp,
+        status: "New",
+        created_at: new Date().toISOString()
+      };
+
+      const { error: insertErr } = await supabase.from("job_applications").insert([application]);
+      if (insertErr) return sendJson(res, 500, { error: `Application failed: ${insertErr.message}` });
+
+      // Send confirmation email
+      const confirmHtml = `
+        <div style="font-family: 'Outfit', sans-serif; line-height: 1.6; color: #0B1B3D; max-width: 600px; margin: 0 auto; border: 1px solid rgba(10, 25, 47, 0.08); border-radius: 16px; padding: 32px; background-color: #FCFAF7;">
+          <div style="text-align: center; margin-bottom: 24px;">
+            <h2 style="color: #0B1B3D; font-family: 'Playfair Display', serif; margin: 0;">Skyward Career & Placement Hub</h2>
+          </div>
+          <p>Dear ${fullName},</p>
+          <p>Your application has been successfully submitted!</p>
+          <div style="background-color: rgba(10, 25, 47, 0.03); border-radius: 12px; padding: 20px; margin: 20px 0; border: 1px solid rgba(10, 25, 47, 0.06);">
+            <h3 style="margin-top: 0; font-size: 16px;">Application Details:</h3>
+            <table cellpadding="4" cellspacing="0" style="font-size: 14px;">
+              <tr><td><strong>Application ID:</strong></td><td style="color: #D4AF37; font-weight: 700;">${applicationId}</td></tr>
+              <tr><td><strong>Position:</strong></td><td>${jobCheck.title}</td></tr>
+              <tr><td><strong>Company:</strong></td><td>${jobCheck.company_name}</td></tr>
+            </table>
+          </div>
+          <p>Our placement team will review your application and contact you shortly.</p>
+          <hr style="border: 0; border-top: 1px solid rgba(10, 25, 47, 0.08); margin: 32px 0;" />
+          <p style="font-size: 13px; color: #4F5D73;">Best regards,<br/><strong>Skyward Career and Placement Hub</strong><br/>Phone: +91 9241080063</p>
+        </div>
+      `;
+      sendMail({ to: email, subject: `Application Received: ${applicationId} | ${jobCheck.title}`, html: confirmHtml, text: `Dear ${fullName}, Your application (${applicationId}) for ${jobCheck.title} at ${jobCheck.company_name} has been received. Our placement team will contact you shortly.` }).catch(e => console.error("App confirm email failed:", e));
+
+      // SMS alert
+      sendSmsAlert(`New Job Application: ${fullName} applied for ${jobCheck.title} at ${jobCheck.company_name}. ID: ${applicationId}`).catch(e => console.error("App SMS failed:", e));
+
+      return sendJson(res, 201, { message: "Application submitted successfully!", applicationId });
+    }
+
+    // --- Public: Secure instant resume upload ---
+    if (req.method === "POST" && pathname === "/api/upload-resume") {
+      const contentType = req.headers["content-type"] || "";
+      if (!contentType.startsWith("multipart/form-data")) {
+        return sendJson(res, 400, { error: "Invalid request format. Multipart form data required." });
+      }
+      const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
+      if (!boundaryMatch) return sendJson(res, 400, { error: "Invalid upload format." });
+      const raw = req.bodyBuffer || await readBody(req, MAX_RESUME_SIZE + MAX_BODY_SIZE);
+      const { fields, files } = parseMultipartFiles(raw, boundaryMatch[1] || boundaryMatch[2]);
+
+      // Honeypot check
+      if (clean(fields.website)) {
+        return sendJson(res, 201, { resumeUrl: "https://example.com/dummy-resume.pdf", resumeName: "resume.pdf" });
+      }
+
+      if (!files.resume) {
+        return sendJson(res, 400, { error: "No resume file uploaded." });
+      }
+
+      try {
+        const resumeData = await saveUploadedResume(files.resume);
+        if (!resumeData) {
+          return sendJson(res, 400, { error: "Upload failed. Please try a different file." });
+        }
+        return sendJson(res, 200, {
+          resumeUrl: resumeData.resumeUrl,
+          resumeName: resumeData.resumeName
+        });
+      } catch (err) {
+        return sendJson(res, 400, { error: err.message || "Failed to upload resume." });
+      }
+    }
+
+    // --- Public: Placement terms ---
+    if (req.method === "GET" && pathname === "/api/placement/terms") {
+      const { data, error } = await supabase.from("placement_settings").select("terms_content").limit(1).single();
+      return sendJson(res, 200, { content: data ? data.terms_content : "" });
+    }
+
+    if (req.method === "GET" && pathname === "/api/placement/policy") {
+      const { data, error } = await supabase.from("placement_settings").select("policy_content").limit(1).single();
+      return sendJson(res, 200, { content: data ? data.policy_content : "" });
+    }
+
+    // --- Admin: List all jobs ---
+    if (req.method === "GET" && pathname === "/api/admin/jobs") {
+      const session = requireAdmin(req, res);
+      if (!session) return;
+      const { data, error } = await supabase
+        .from("jobs")
+        .select("*, job_categories(name, slug)")
+        .order("created_at", { ascending: false });
+      if (error) return sendJson(res, 500, { error: error.message });
+      return sendJson(res, 200, { jobs: data || [] });
+    }
+
+    // --- Admin: Create job ---
+    if (req.method === "POST" && pathname === "/api/admin/jobs") {
+      const session = requireAdmin(req, res);
+      if (!session || !verifyCsrf(req, res, session)) return;
+      const { fields: body, file } = await parsePostSubmission(req);
+      const savedLogo = await saveUploadedMedia(file);
+
+      const title = clean(body.title);
+      const companyName = clean(body.company_name);
+      if (!title || !companyName) return sendJson(res, 400, { error: "Job title and company name are required." });
+
+      let slug = slugify(`${title}-${companyName}`);
+      // Check slug uniqueness
+      const { data: existingSlug } = await supabase.from("jobs").select("id").eq("slug", slug).limit(1);
+      if (existingSlug && existingSlug.length > 0) slug = `${slug}-${Date.now().toString(36)}`;
+
+      const skillsRaw = clean(body.skills_required);
+      const skills = skillsRaw ? skillsRaw.split(",").map(s => s.trim()).filter(Boolean) : [];
+
+      const job = {
+        title,
+        slug,
+        company_name: companyName,
+        company_logo_url: savedLogo ? savedLogo.mediaUrl : null,
+        location: clean(body.location) || "India",
+        salary_min: parseInt(body.salary_min) || 0,
+        salary_max: parseInt(body.salary_max) || 0,
+        experience_min: parseInt(body.experience_min) || 0,
+        experience_max: parseInt(body.experience_max) || 0,
+        employment_type: clean(body.employment_type) || "Full-Time",
+        work_mode: clean(body.work_mode) || "Work From Office",
+        category_id: body.category_id || null,
+        description: clean(body.description),
+        skills_required: skills,
+        openings: parseInt(body.openings) || 1,
+        last_date: body.last_date || null,
+        is_featured: body.is_featured === "on" || body.is_featured === "true",
+        is_active: true,
+        experience_level: clean(body.experience_level) || "Both",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      const { data: created, error } = await supabase.from("jobs").insert([job]).select().single();
+      if (error) return sendJson(res, 500, { error: `Failed to create job: ${error.message}` });
+      return sendJson(res, 201, { job: created });
+    }
+
+    // --- Admin: Update job ---
+    const adminJobMatch = pathname.match(/^\/api\/admin\/jobs\/([a-zA-Z0-9-]+)$/);
+    if (req.method === "PUT" && adminJobMatch) {
+      const session = requireAdmin(req, res);
+      if (!session || !verifyCsrf(req, res, session)) return;
+      const jobId = adminJobMatch[1];
+      const { fields: body, file } = await parsePostSubmission(req);
+      const savedLogo = await saveUploadedMedia(file);
+
+      const updates = { updated_at: new Date().toISOString() };
+      if (body.title) updates.title = clean(body.title);
+      if (body.company_name) updates.company_name = clean(body.company_name);
+      if (savedLogo) updates.company_logo_url = savedLogo.mediaUrl;
+      if (body.location) updates.location = clean(body.location);
+      if (body.salary_min !== undefined) updates.salary_min = parseInt(body.salary_min) || 0;
+      if (body.salary_max !== undefined) updates.salary_max = parseInt(body.salary_max) || 0;
+      if (body.experience_min !== undefined) updates.experience_min = parseInt(body.experience_min) || 0;
+      if (body.experience_max !== undefined) updates.experience_max = parseInt(body.experience_max) || 0;
+      if (body.employment_type) updates.employment_type = clean(body.employment_type);
+      if (body.work_mode) updates.work_mode = clean(body.work_mode);
+      if (body.category_id) updates.category_id = body.category_id;
+      if (body.description) updates.description = clean(body.description);
+      if (body.skills_required) updates.skills_required = clean(body.skills_required).split(",").map(s => s.trim()).filter(Boolean);
+      if (body.openings !== undefined) updates.openings = parseInt(body.openings) || 1;
+      if (body.last_date) updates.last_date = body.last_date;
+      if (body.is_featured !== undefined) updates.is_featured = body.is_featured === "on" || body.is_featured === "true";
+      if (body.is_active !== undefined) updates.is_active = body.is_active === "on" || body.is_active === "true";
+      if (body.experience_level) updates.experience_level = clean(body.experience_level);
+
+      const { data, error } = await supabase.from("jobs").update(updates).eq("id", jobId).select().single();
+      if (error) return sendJson(res, 500, { error: error.message });
+      return sendJson(res, 200, { job: data });
+    }
+
+    // --- Admin: Delete job ---
+    if (req.method === "DELETE" && adminJobMatch) {
+      const session = requireAdmin(req, res);
+      if (!session || !verifyCsrf(req, res, session)) return;
+      const { error } = await supabase.from("jobs").delete().eq("id", adminJobMatch[1]);
+      if (error) return sendJson(res, 500, { error: error.message });
+      return sendJson(res, 200, { message: "Job deleted." });
+    }
+
+    // --- Admin: Toggle job active/featured ---
+    const toggleMatch = pathname.match(/^\/api\/admin\/jobs\/([a-zA-Z0-9-]+)\/toggle$/);
+    if (req.method === "PATCH" && toggleMatch) {
+      const session = requireAdmin(req, res);
+      if (!session || !verifyCsrf(req, res, session)) return;
+      const body = await parseBody(req);
+      const updates = { updated_at: new Date().toISOString() };
+      if (body.is_active !== undefined) updates.is_active = Boolean(body.is_active);
+      if (body.is_featured !== undefined) updates.is_featured = Boolean(body.is_featured);
+      const { data, error } = await supabase.from("jobs").update(updates).eq("id", toggleMatch[1]).select().single();
+      if (error) return sendJson(res, 500, { error: error.message });
+      return sendJson(res, 200, { job: data });
+    }
+
+    // --- Admin: List all applications ---
+    if (req.method === "GET" && pathname === "/api/admin/applications") {
+      const session = requireAdmin(req, res);
+      if (!session) return;
+      const url = new URL(req.url, "http://localhost");
+      let query = supabase
+        .from("job_applications")
+        .select("*, jobs(title, company_name)")
+        .order("created_at", { ascending: false });
+
+      const jobFilter = url.searchParams.get("job_id");
+      const statusFilter = url.searchParams.get("status");
+      const levelFilter = url.searchParams.get("level");
+      if (jobFilter) query = query.eq("job_id", jobFilter);
+      if (statusFilter) query = query.eq("status", statusFilter);
+      if (levelFilter) query = query.eq("employment_status", levelFilter);
+
+      const { data, error } = await query;
+      if (error) return sendJson(res, 500, { error: error.message });
+      return sendJson(res, 200, { applications: data || [] });
+    }
+
+    // --- Admin: Update application status ---
+    const appStatusMatch = pathname.match(/^\/api\/admin\/applications\/([a-zA-Z0-9-]+)\/status$/);
+    if (req.method === "PATCH" && appStatusMatch) {
+      const session = requireAdmin(req, res);
+      if (!session || !verifyCsrf(req, res, session)) return;
+      const body = await parseBody(req);
+      const validStatuses = ["New", "Shortlisted", "Interview Scheduled", "Selected", "Rejected", "Joined"];
+      if (!validStatuses.includes(body.status)) return sendJson(res, 400, { error: "Invalid status." });
+      const { data, error } = await supabase.from("job_applications").update({ status: body.status }).eq("id", appStatusMatch[1]).select().single();
+      if (error) return sendJson(res, 500, { error: error.message });
+      return sendJson(res, 200, { application: data });
+    }
+
+    // --- Admin: Job analytics ---
+    if (req.method === "GET" && pathname === "/api/admin/job-analytics") {
+      const session = requireAdmin(req, res);
+      if (!session) return;
+      const [jobsRes, activeRes, appsRes, selectedRes, joinedRes] = await Promise.all([
+        supabase.from("jobs").select("*", { count: "exact", head: true }),
+        supabase.from("jobs").select("*", { count: "exact", head: true }).eq("is_active", true),
+        supabase.from("job_applications").select("*", { count: "exact", head: true }),
+        supabase.from("job_applications").select("*", { count: "exact", head: true }).eq("status", "Selected"),
+        supabase.from("job_applications").select("*", { count: "exact", head: true }).eq("status", "Joined")
+      ]);
+      const totalJobs = jobsRes.count || 0;
+      const activeJobs = activeRes.count || 0;
+      const totalApps = appsRes.count || 0;
+      const selected = selectedRes.count || 0;
+      const joined = joinedRes.count || 0;
+      const conversionRate = totalApps > 0 ? (((selected + joined) / totalApps) * 100).toFixed(1) : "0.0";
+      return sendJson(res, 200, { totalJobs, activeJobs, totalApplications: totalApps, selected: selected + joined, conversionRate: `${conversionRate}%` });
+    }
+
+    // --- Admin: Add category ---
+    if (req.method === "POST" && pathname === "/api/admin/job-categories") {
+      const session = requireAdmin(req, res);
+      if (!session || !verifyCsrf(req, res, session)) return;
+      const body = await parseBody(req);
+      const name = clean(body.name);
+      if (!name) return sendJson(res, 400, { error: "Category name is required." });
+      const slug = slugify(name);
+      const { data, error } = await supabase.from("job_categories").insert([{ name, slug }]).select().single();
+      if (error) return sendJson(res, 500, { error: error.message });
+      return sendJson(res, 201, { category: data });
+    }
+
+    // --- Admin: Delete category ---
+    const catDelMatch = pathname.match(/^\/api\/admin\/job-categories\/([a-zA-Z0-9-]+)$/);
+    if (req.method === "DELETE" && catDelMatch) {
+      const session = requireAdmin(req, res);
+      if (!session || !verifyCsrf(req, res, session)) return;
+      const { error } = await supabase.from("job_categories").delete().eq("id", catDelMatch[1]);
+      if (error) return sendJson(res, 500, { error: error.message });
+      return sendJson(res, 200, { message: "Category deleted." });
+    }
+
+    // --- Admin: Update placement terms ---
+    if (req.method === "PUT" && pathname === "/api/admin/placement/terms") {
+      const session = requireAdmin(req, res);
+      if (!session || !verifyCsrf(req, res, session)) return;
+      const body = await parseBody(req);
+      const { data: existing } = await supabase.from("placement_settings").select("id").limit(1).single();
+      if (existing) {
+        await supabase.from("placement_settings").update({ terms_content: clean(body.content), updated_at: new Date().toISOString() }).eq("id", existing.id);
+      } else {
+        await supabase.from("placement_settings").insert([{ terms_content: clean(body.content) }]);
+      }
+      return sendJson(res, 200, { message: "Terms updated." });
+    }
+
+    // --- Admin: Update placement policy ---
+    if (req.method === "PUT" && pathname === "/api/admin/placement/policy") {
+      const session = requireAdmin(req, res);
+      if (!session || !verifyCsrf(req, res, session)) return;
+      const body = await parseBody(req);
+      const { data: existing } = await supabase.from("placement_settings").select("id").limit(1).single();
+      if (existing) {
+        await supabase.from("placement_settings").update({ policy_content: clean(body.content), updated_at: new Date().toISOString() }).eq("id", existing.id);
+      } else {
+        await supabase.from("placement_settings").insert([{ policy_content: clean(body.content) }]);
+      }
+      return sendJson(res, 200, { message: "Policy updated." });
+    }
+
+    sendJson(res, 404, { error: "Endpoint not found." });
   }
 
   function serveStatic(res, pathname) {
@@ -999,7 +1530,14 @@ sendJson(res, 404, { error: "Endpoint not found." });
       if (fs.existsSync(mediaPath) && fs.statSync(mediaPath).isFile()) return sendFile(res, mediaPath, 200);
       return sendFile(res, path.join(PUBLIC_DIR, "404.html"), 404);
     }
-    const pagePaths = { "/": "index.html", "/about": "about.html", "/contact": "contact.html", "/admin": "admin.html" };
+    const pagePaths = {
+      "/": "index.html", "/about": "about.html", "/contact": "contact.html", "/admin": "admin.html",
+      "/jobs": "jobs.html", "/terms": "terms.html", "/placement-policy": "placement-policy.html"
+    };
+    // Handle /jobs/some-slug → job-detail.html
+    if (pathname.startsWith("/jobs/") && pathname !== "/jobs/") {
+      return sendFile(res, path.join(PUBLIC_DIR, "job-detail.html"), 200);
+    }
     const relative = pagePaths[pathname] || pathname.replace(/^\/+/, "");
     const target = path.resolve(PUBLIC_DIR, relative);
     if (!target.startsWith(`${PUBLIC_DIR}${path.sep}`) || !fs.existsSync(target) || fs.statSync(target).isDirectory()) {
@@ -1039,8 +1577,10 @@ sendJson(res, 404, { error: "Endpoint not found." });
     let bodyBuffer = null;
     if (req.method === "POST" || req.method === "PUT") {
       try {
-        const isUpload = pathname.startsWith("/api/admin/posts") || pathname.startsWith("/api/admin/gallery");
-        bodyBuffer = await readBody(req, isUpload ? MAX_UPLOAD_SIZE + MAX_BODY_SIZE : MAX_BODY_SIZE);
+        const isUpload = pathname.startsWith("/api/admin/posts") || pathname.startsWith("/api/admin/gallery") || pathname.startsWith("/api/admin/jobs");
+        const isApply = pathname.match(/^\/api\/jobs\/[a-zA-Z0-9-]+\/apply$/) || pathname === "/api/upload-resume";
+        const uploadLimit = isApply ? MAX_RESUME_SIZE + MAX_BODY_SIZE : (isUpload ? MAX_UPLOAD_SIZE + MAX_BODY_SIZE : MAX_BODY_SIZE);
+        bodyBuffer = await readBody(req, uploadLimit);
         req.bodyBuffer = bodyBuffer; // Store on request for parser use
       } catch (err) {
         return sendJson(res, 400, { error: err.message });
@@ -1068,11 +1608,19 @@ sendJson(res, 404, { error: "Endpoint not found." });
       }
     }
 
+    if ((pathname.match(/^\/api\/jobs\/[a-zA-Z0-9-]+\/apply$/) || pathname === "/api/upload-resume") && req.method === "POST") {
+      if (applyLimiter.isLimitExceeded(ip)) {
+        console.warn(`[RateLimit] Application limit exceeded for IP: ${ip}`);
+        return sendJson(res, 429, { error: "Too many applications submitted. Please try again in an hour." });
+      }
+    }
+
     try {
       if (pathname.startsWith("/api/")) return await handleApi(req, res, pathname);
       if (req.method !== "GET" && req.method !== "HEAD") return sendJson(res, 405, { error: "Method not allowed." });
       serveStatic(res, pathname);
     } catch (error) {
+      console.error("Error handling request:", error);
       const inputError = /(large|format|Upload a|smaller than|Supabase)/.test(error.message);
       const status = inputError ? 400 : 500;
       sendJson(res, status, { error: status === 500 ? "Something went wrong. Please try again." : error.message });

@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Job Openings | Skyward Career and Placement Hub</title>
+    <meta name="description" content="Browse latest job openings, search by keyword, location, company and apply directly. Skyward Career and Placement Hub connects you with top employers.">
+    <meta property="og:title" content="Job Openings | Skyward Career and Placement Hub">
+    <meta property="og:description" content="Browse and apply for the latest jobs across IT, Finance, Marketing, Engineering and more.">
+    <meta property="og:type" content="website">
+    <link rel="icon" type="image/png" href="/assets/skyward-logo.png">
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/jobs.js" defer></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container header-row">
+        <a href="/" class="brand" aria-label="Skyward Career and Placement Hub home"><img src="/assets/skyward-logo.png" alt="Skyward Career and Placement Hub"></a>
+        <button class="menu-toggle" type="button" aria-expanded="false" aria-label="Open menu">&#9776;</button>
+        <nav class="main-nav" aria-label="Main navigation">
+          <a href="/">Home</a>
+          <a class="active" href="/jobs">Jobs</a>
+          <a href="/about">About Us</a>
+          <a href="/contact">Contact Us</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="jobs-hero">
+        <div class="container">
+          <div class="eyebrow">Career Opportunities</div>
+          <h1>Find Your Next <span class="jobs-hero-highlight">Career Move</span></h1>
+          <p>Explore curated job openings from top companies. Search, filter and apply in minutes.</p>
+          <div class="jobs-search-bar" id="jobs-search-bar">
+            <div class="jobs-search-field">
+              <label for="search-keyword" class="sr-only">Keyword</label>
+              <input id="search-keyword" type="text" placeholder="Job title, skill, or keyword..." data-search-keyword>
+            </div>
+            <div class="jobs-search-field">
+              <label for="search-location" class="sr-only">Location</label>
+              <input id="search-location" type="text" placeholder="Location..." data-search-location>
+            </div>
+            <div class="jobs-search-field">
+              <label for="search-category" class="sr-only">Category</label>
+              <select id="search-category" data-search-category>
+                <option value="">All Categories</option>
+              </select>
+            </div>
+            <button class="button gold jobs-search-btn" type="button" data-search-submit>Search Jobs</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="section jobs-section">
+        <div class="container jobs-layout">
+          <aside class="jobs-filters" id="jobs-filters">
+            <div class="jobs-filters-header">
+              <h3>Filters</h3>
+              <button class="jobs-filter-clear" type="button" data-clear-filters>Clear All</button>
+            </div>
+
+            <div class="filter-group">
+              <h4>Experience Level</h4>
+              <label class="filter-check"><input type="checkbox" name="level" value="Fresher"> Freshers</label>
+              <label class="filter-check"><input type="checkbox" name="level" value="Experienced"> Experienced</label>
+            </div>
+
+            <div class="filter-group">
+              <h4>Employment Type</h4>
+              <label class="filter-check"><input type="checkbox" name="type" value="Full-Time"> Full-Time</label>
+              <label class="filter-check"><input type="checkbox" name="type" value="Part-Time"> Part-Time</label>
+              <label class="filter-check"><input type="checkbox" name="type" value="Internship"> Internship</label>
+              <label class="filter-check"><input type="checkbox" name="type" value="Contract"> Contract</label>
+            </div>
+
+            <div class="filter-group">
+              <h4>Work Mode</h4>
+              <label class="filter-check"><input type="checkbox" name="mode" value="Remote"> Remote</label>
+              <label class="filter-check"><input type="checkbox" name="mode" value="Work From Office"> Work From Office</label>
+              <label class="filter-check"><input type="checkbox" name="mode" value="Hybrid"> Hybrid</label>
+            </div>
+
+            <div class="filter-group">
+              <h4>Salary Range (₹ LPA)</h4>
+              <div class="salary-range-inputs">
+                <input type="number" placeholder="Min" data-salary-min min="0">
+                <span>to</span>
+                <input type="number" placeholder="Max" data-salary-max min="0">
+              </div>
+            </div>
+          </aside>
+
+          <div class="jobs-main">
+            <div class="jobs-toolbar">
+              <p class="jobs-count" data-jobs-count>Loading jobs...</p>
+              <button class="button outline jobs-filter-toggle" type="button" data-filter-toggle>☰ Filters</button>
+            </div>
+
+            <div class="jobs-grid" data-jobs-grid>
+              <p class="muted">Loading available positions...</p>
+            </div>
+
+            <div class="jobs-pagination" data-jobs-pagination></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container">
+        <div class="footer-grid">
+          <div class="footer-brand">
+            <img src="/assets/skyward-logo.png" alt="Skyward Career and Placement Hub">
+            <p>Premium education and placement consultancy helping ambitious students pursue exceptional futures.</p>
+          </div>
+          <div>
+            <h4>Explore</h4>
+            <div class="footer-links"><a href="/">Home</a><a href="/jobs">Jobs</a><a href="/about">About Us</a><a href="/contact">Contact Us</a></div>
+          </div>
+          <div>
+            <h4>Services</h4>
+            <div class="footer-links"><span>Admissions</span><span>Study Abroad</span><span>Scholarships</span><span>Visa Support</span></div>
+          </div>
+          <div>
+            <h4>Connect</h4>
+            <div class="footer-links"><a href="tel:+919241080063">+91 9241080063</a><a href="mailto:hello@skywardeducation.com">hello@skywardeducation.com</a><span>Darbhanga Naka 05</span></div>
+          </div>
+        </div>
+        <div class="copyright">&copy; 2026 Skyward Career and Placement Hub. All rights reserved.</div>
+      </div>
+    </footer>
+    <a href="https://wa.me/919241080063" class="whatsapp-float" target="_blank">WhatsApp</a>
+  </body>
+</html>
