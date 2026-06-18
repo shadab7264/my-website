@@ -224,6 +224,8 @@ function createApp(options = {}) {
   const dataDir = options.dataDir || process.env.DATA_DIR || DEFAULT_DATA_DIR;
   const adminEmail = (options.adminEmail || process.env.ADMIN_EMAIL || "skywardcareerandplacementhub@gmail.com").toLowerCase();
   const adminPassword = options.adminPassword || process.env.ADMIN_PASSWORD || "ChangeMe123!";
+  const jobPosterEmail = (options.jobPosterEmail || process.env.JOB_POSTER_EMAIL || "recruiter@skywardeducation.com").toLowerCase();
+  const jobPosterPassword = options.jobPosterPassword || process.env.JOB_POSTER_PASSWORD || "RecruitMe123!";
   const sessionSecret = options.sessionSecret || process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex");
   const googleSheetsWebhookUrl = options.googleSheetsWebhookUrl || process.env.GOOGLE_SHEETS_WEBHOOK_URL || "";
   const googleSheetsSecret = options.googleSheetsSecret || process.env.GOOGLE_SHEETS_SECRET || "";
@@ -516,10 +518,20 @@ function createApp(options = {}) {
     return { token, ...session };
   }
 
-  function requireAdmin(req, res) {
+  function requireSession(req, res) {
     const session = currentSession(req);
     if (!session) {
       sendJson(res, 401, { error: "Please log in to continue." });
+      return null;
+    }
+    return session;
+  }
+
+  function requireAdmin(req, res) {
+    const session = requireSession(req, res);
+    if (!session) return null;
+    if (session.role !== "admin") {
+      sendJson(res, 403, { error: "Forbidden: Admin access required." });
       return null;
     }
     return session;
@@ -745,24 +757,39 @@ function createApp(options = {}) {
 
     if (req.method === "POST" && pathname === "/api/admin/login") {
       const body = await parseBody(req);
-      if (clean(body.email).toLowerCase() !== adminEmail || !safeEqual(clean(body.password), adminPassword)) {
+      const emailInput = clean(body.email).toLowerCase();
+      const passwordInput = clean(body.password);
+
+      let authenticatedEmail = null;
+      let userRole = null;
+
+      if (emailInput === adminEmail && safeEqual(passwordInput, adminPassword)) {
+        authenticatedEmail = adminEmail;
+        userRole = "admin";
+      } else if (emailInput === jobPosterEmail && safeEqual(passwordInput, jobPosterPassword)) {
+        authenticatedEmail = jobPosterEmail;
+        userRole = "job_poster";
+      }
+
+      if (!authenticatedEmail) {
         return sendJson(res, 401, { error: "Incorrect email or password." });
       }
+
       const token = crypto.randomBytes(32).toString("hex");
       const csrfToken = crypto.randomBytes(24).toString("hex");
-      sessions.set(token, { csrfToken, expiresAt: Date.now() + SESSION_MAX_AGE, email: adminEmail });
+      sessions.set(token, { csrfToken, expiresAt: Date.now() + SESSION_MAX_AGE, email: authenticatedEmail, role: userRole });
       const isProduction = process.env.NODE_ENV === "production" || !(req.headers.host || "").includes("localhost");
       res.setHeader(
         "Set-Cookie",
         `skyward_session=${token}.${sign(token)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${SESSION_MAX_AGE / 1000}${isProduction ? "; Secure" : ""}`
       );
-      return sendJson(res, 200, { email: adminEmail, csrfToken });
+      return sendJson(res, 200, { email: authenticatedEmail, role: userRole, csrfToken });
     }
 
     if (req.method === "GET" && pathname === "/api/admin/session") {
       const session = currentSession(req);
       if (!session) return sendJson(res, 401, { authenticated: false });
-      return sendJson(res, 200, { authenticated: true, email: session.email, csrfToken: session.csrfToken });
+      return sendJson(res, 200, { authenticated: true, email: session.email, role: session.role || "admin", csrfToken: session.csrfToken });
     }
 
     if (req.method === "GET" && pathname === "/api/admin/debug-env") {
@@ -1299,7 +1326,7 @@ if (req.method === "DELETE" && postMatch) {
 
     // --- Admin: List all jobs ---
     if (req.method === "GET" && pathname === "/api/admin/jobs") {
-      const session = requireAdmin(req, res);
+      const session = requireSession(req, res);
       if (!session) return;
       const { data, error } = await supabase
         .from("jobs")
@@ -1311,7 +1338,7 @@ if (req.method === "DELETE" && postMatch) {
 
     // --- Admin: Create job ---
     if (req.method === "POST" && pathname === "/api/admin/jobs") {
-      const session = requireAdmin(req, res);
+      const session = requireSession(req, res);
       if (!session || !verifyCsrf(req, res, session)) return;
       const { fields: body, file } = await parsePostSubmission(req);
       const savedLogo = await saveUploadedMedia(file);
@@ -1361,7 +1388,7 @@ if (req.method === "DELETE" && postMatch) {
     // --- Admin: Update job ---
     const adminJobMatch = pathname.match(/^\/api\/admin\/jobs\/([a-zA-Z0-9-]+)$/);
     if (req.method === "PUT" && adminJobMatch) {
-      const session = requireAdmin(req, res);
+      const session = requireSession(req, res);
       if (!session || !verifyCsrf(req, res, session)) return;
       const jobId = adminJobMatch[1];
       const { fields: body, file } = await parsePostSubmission(req);
@@ -1395,7 +1422,7 @@ if (req.method === "DELETE" && postMatch) {
 
     // --- Admin: Delete job ---
     if (req.method === "DELETE" && adminJobMatch) {
-      const session = requireAdmin(req, res);
+      const session = requireSession(req, res);
       if (!session || !verifyCsrf(req, res, session)) return;
       const { error } = await supabase.from("jobs").delete().eq("id", adminJobMatch[1]);
       if (error) return sendJson(res, 500, { error: error.message });
@@ -1405,7 +1432,7 @@ if (req.method === "DELETE" && postMatch) {
     // --- Admin: Toggle job active/featured ---
     const toggleMatch = pathname.match(/^\/api\/admin\/jobs\/([a-zA-Z0-9-]+)\/toggle$/);
     if (req.method === "PATCH" && toggleMatch) {
-      const session = requireAdmin(req, res);
+      const session = requireSession(req, res);
       if (!session || !verifyCsrf(req, res, session)) return;
       const body = await parseBody(req);
       const updates = { updated_at: new Date().toISOString() };
@@ -1418,7 +1445,7 @@ if (req.method === "DELETE" && postMatch) {
 
     // --- Admin: List all applications ---
     if (req.method === "GET" && pathname === "/api/admin/applications") {
-      const session = requireAdmin(req, res);
+      const session = requireSession(req, res);
       if (!session) return;
       const url = new URL(req.url, "http://localhost");
       let query = supabase
@@ -1441,7 +1468,7 @@ if (req.method === "DELETE" && postMatch) {
     // --- Admin: Update application status ---
     const appStatusMatch = pathname.match(/^\/api\/admin\/applications\/([a-zA-Z0-9-]+)\/status$/);
     if (req.method === "PATCH" && appStatusMatch) {
-      const session = requireAdmin(req, res);
+      const session = requireSession(req, res);
       if (!session || !verifyCsrf(req, res, session)) return;
       const body = await parseBody(req);
       const validStatuses = ["New", "Shortlisted", "Interview Scheduled", "Selected", "Rejected", "Joined"];
@@ -1453,7 +1480,7 @@ if (req.method === "DELETE" && postMatch) {
 
     // --- Admin: Job analytics ---
     if (req.method === "GET" && pathname === "/api/admin/job-analytics") {
-      const session = requireAdmin(req, res);
+      const session = requireSession(req, res);
       if (!session) return;
       const [jobsRes, activeRes, appsRes, selectedRes, joinedRes] = await Promise.all([
         supabase.from("jobs").select("*", { count: "exact", head: true }),
@@ -1473,7 +1500,7 @@ if (req.method === "DELETE" && postMatch) {
 
     // --- Admin: Add category ---
     if (req.method === "POST" && pathname === "/api/admin/job-categories") {
-      const session = requireAdmin(req, res);
+      const session = requireSession(req, res);
       if (!session || !verifyCsrf(req, res, session)) return;
       const body = await parseBody(req);
       const name = clean(body.name);
@@ -1487,7 +1514,7 @@ if (req.method === "DELETE" && postMatch) {
     // --- Admin: Delete category ---
     const catDelMatch = pathname.match(/^\/api\/admin\/job-categories\/([a-zA-Z0-9-]+)$/);
     if (req.method === "DELETE" && catDelMatch) {
-      const session = requireAdmin(req, res);
+      const session = requireSession(req, res);
       if (!session || !verifyCsrf(req, res, session)) return;
       const { error } = await supabase.from("job_categories").delete().eq("id", catDelMatch[1]);
       if (error) return sendJson(res, 500, { error: error.message });

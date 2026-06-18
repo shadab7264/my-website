@@ -276,7 +276,28 @@ async function run() {
       assert.equal((await fetch(`${base}${mediaPost.mediaUrl}`)).status, 404);
     }
 
-    console.log("Smoke test passed: pages, Google Sheets leads, admin publishing and media uploads work.");
+    // Test Recruiter/Job Poster Role & Access Control
+    const recLogin = await fetch(`${base}/api/admin/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "recruiter@skywardeducation.com", password: "RecruitMe123!" })
+    });
+    assert.equal(recLogin.status, 200);
+    const recSession = await recLogin.json();
+    assert.equal(recSession.role, "job_poster");
+    const recCookie = recLogin.headers.get("set-cookie").split(";")[0];
+
+    const recSessionCheck = await fetch(`${base}/api/admin/session`, { headers: { Cookie: recCookie } });
+    assert.equal(recSessionCheck.status, 200);
+    assert.equal((await recSessionCheck.json()).role, "job_poster");
+
+    const recLeads = await fetch(`${base}/api/admin/leads`, { headers: { Cookie: recCookie } });
+    assert.equal(recLeads.status, 403);
+
+    const recJobs = await fetch(`${base}/api/admin/jobs`, { headers: { Cookie: recCookie } });
+    assert.equal(recJobs.status, 200);
+
+    console.log("Smoke test passed: pages, Google Sheets leads, admin publishing, media uploads, and recruiter role permissions work.");
   } finally {
     await new Promise((resolve) => server.close(resolve));
     fs.rmSync(dataDir, { recursive: true, force: true });
