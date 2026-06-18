@@ -46,6 +46,7 @@
             <div class="dashboard-tabs">
               <button class="button outline active" type="button" data-tab="content">Content & Leads</button>
               <button class="button outline" type="button" data-tab="jobs">Jobs & Applications</button>
+              <button class="button outline hidden" type="button" data-tab="users" id="users-tab-btn">Users & Audit</button>
             </div>
             <button class="button outline" type="button" data-logout>Log Out</button>
           </div>
@@ -345,6 +346,54 @@
             </section>
 
           </div>
+
+          <!-- Users & Audit Grid -->
+          <div class="admin-grid hidden" id="users-grid" style="grid-template-columns: 1fr;">
+            <section class="panel">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                <h2>Manage Staff & Roles</h2>
+                <button class="button sm gold" id="btn-create-user">Create New User</button>
+              </div>
+              <div class="table-container">
+                <table class="leads-table">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Email</th>
+                      <th>Role</th>
+                      <th>Status</th>
+                      <th>Last Login</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="users-tbody">
+                    <!-- Rendered by JS -->
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="panel">
+              <h2>System Audit Logs</h2>
+              <div class="table-container" style="max-height: 400px; overflow-y: auto;">
+                <table class="leads-table">
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>User</th>
+                      <th>Action</th>
+                      <th>IP Address</th>
+                      <th>Details</th>
+                    </tr>
+                  </thead>
+                  <tbody id="audit-logs-tbody">
+                    <!-- Rendered by JS -->
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+
         </section>
       </div>
     </main>
@@ -375,6 +424,80 @@
             <button class="button gold" type="submit">Send Email</button>
           </div>
           <p class="form-message" data-email-modal-message aria-live="polite"></p>
+        </form>
+      </div>
+    </div>
+
+
+
+    <!-- User Modal Overlay -->
+    <div class="modal-overlay" data-user-modal>
+      <div class="modal-card" style="max-width: 800px;">
+        <div class="modal-header">
+          <h2 id="user-modal-title">Create User</h2>
+          <button class="modal-close-btn" data-close-user-modal type="button" aria-label="Close">&times;</button>
+        </div>
+        <form id="user-form" class="stack-form">
+          <input type="hidden" id="user-id" name="userId">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="field">
+              <label for="user-name">Full Name *</label>
+              <input id="user-name" name="full_name" required>
+            </div>
+            <div class="field">
+              <label for="user-email">Email Address *</label>
+              <input id="user-email" type="email" name="email" required>
+            </div>
+            <div class="field" id="user-password-field">
+              <label for="user-password">Password *</label>
+              <input id="user-password" type="text" name="password">
+            </div>
+            <div class="field">
+              <label for="user-phone">Phone Number</label>
+              <input id="user-phone" type="text" name="phone">
+            </div>
+            <div class="field">
+              <label for="user-department">Department</label>
+              <input id="user-department" name="department">
+            </div>
+            <div class="field">
+              <label for="user-designation">Designation</label>
+              <input id="user-designation" name="designation">
+            </div>
+            <div class="field">
+              <label for="user-role">Role Template</label>
+              <select id="user-role" name="role">
+                <option value="staff">Custom Staff</option>
+                <option value="content_manager">Content Manager</option>
+                <option value="lead_manager">Lead Manager</option>
+                <option value="job_manager">Job Manager</option>
+                <option value="gallery_manager">Gallery Manager</option>
+                <option value="counselor">Counselor</option>
+                <option value="accounts_executive">Accounts Executive</option>
+                <option value="super_admin">Super Admin</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="user-status">Status</label>
+              <select id="user-status" name="status">
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="margin-top: 1.5rem;">
+            <h3>Permissions</h3>
+            <p class="muted" style="font-size: 0.85rem; margin-bottom: 1rem;">Assign specific module access. Selecting a role template above will pre-fill these.</p>
+            <div class="permission-matrix" id="permission-matrix">
+              <!-- Rendered by JS -->
+            </div>
+          </div>
+
+          <div class="modal-actions" style="margin-top: 2rem;">
+            <button class="button outline" data-close-user-modal type="button">Cancel</button>
+            <button class="button gold" type="submit">Save User</button>
+          </div>
         </form>
       </div>
     </div>

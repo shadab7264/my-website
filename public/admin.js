@@ -2,6 +2,7 @@
 
 let csrfToken = "";
 let editingJobId = null;
+let currentUser = null;
 
 const loginPanel = document.querySelector("[data-login-panel]");
 const dashboard = document.querySelector("[data-dashboard]");
@@ -23,9 +24,70 @@ async function request(url, options = {}) {
 
 function showDashboard(session) {
   csrfToken = session.csrfToken;
+  currentUser = session;
   loginPanel.classList.add("hidden");
   dashboard.classList.add("visible");
   document.querySelector("[data-admin-email]").textContent = session.email;
+  
+  // Tab visibility
+  const perms = currentUser.permissions || {};
+  const isSuper = currentUser.role === "super_admin";
+  
+  const hasContent = isSuper || perms.manage_content || perms.manage_posts || perms.manage_gallery || perms.manage_leads;
+  const hasJobs = isSuper || perms.create_jobs || perms.edit_jobs || perms.delete_jobs || perms.view_applications || perms.shortlist_candidates || perms.export_applications;
+  const hasUsers = isSuper || perms.create_users || perms.edit_users || perms.delete_users || perms.assign_permissions;
+
+  const contentTabBtn = document.querySelector(".dashboard-tabs button[data-tab='content']");
+  const jobsTabBtn = document.querySelector(".dashboard-tabs button[data-tab='jobs']");
+  const usersTabBtn = document.getElementById("users-tab-btn");
+
+  if (contentTabBtn) contentTabBtn.style.display = hasContent ? "" : "none";
+  if (jobsTabBtn) jobsTabBtn.style.display = hasJobs ? "" : "none";
+  if (usersTabBtn) usersTabBtn.style.display = hasUsers ? "" : "none";
+
+  // Hide/Show Panels in Content Tab
+  const pubContentPanel = document.querySelector("[data-post-form]")?.closest("section.panel");
+  const pubPostsPanel = document.querySelector("[data-admin-posts]")?.closest("section.panel");
+  if (pubContentPanel) pubContentPanel.style.display = (isSuper || perms.manage_posts) ? "" : "none";
+  if (pubPostsPanel) pubPostsPanel.style.display = (isSuper || perms.manage_posts) ? "" : "none";
+  
+  const galleryPanel = document.querySelector("[data-gallery-form]")?.closest("section.panel");
+  if (galleryPanel) galleryPanel.style.display = (isSuper || perms.manage_gallery) ? "" : "none";
+
+  const siteContentPanel = document.querySelector("[data-content-form]")?.closest("section.panel");
+  if (siteContentPanel) siteContentPanel.style.display = (isSuper || perms.manage_content) ? "" : "none";
+
+  const leadsPanel = document.querySelector("[data-leads-table]")?.closest("section.panel");
+  if (leadsPanel) leadsPanel.style.display = (isSuper || perms.manage_leads) ? "" : "none";
+
+  // Hide/Show Panels in Jobs Tab
+  const jobFormPanel = document.getElementById("job-form-panel");
+  const pubJobsPanel = document.querySelector("[data-jobs-table]")?.closest("section.panel");
+  const canManageJobs = isSuper || perms.create_jobs || perms.edit_jobs || perms.delete_jobs;
+  if (jobFormPanel) jobFormPanel.style.display = canManageJobs ? "" : "none";
+  if (pubJobsPanel) pubJobsPanel.style.display = canManageJobs ? "" : "none";
+
+  const appsPanel = document.querySelector("[data-apps-table]")?.closest("section.panel");
+  if (appsPanel) appsPanel.style.display = (isSuper || perms.view_applications || perms.shortlist_candidates) ? "" : "none";
+
+  const placementPanel = document.querySelector("[data-terms-form]")?.closest("section.panel");
+  if (placementPanel) placementPanel.style.display = isSuper ? "" : "none";
+
+  // Ensure "hidden" class is removed from users button if it shouldn't be hidden
+  if (usersTabBtn) {
+    if (hasUsers) usersTabBtn.classList.remove("hidden");
+    else usersTabBtn.classList.add("hidden");
+  }
+
+  // Auto-switch to the first accessible tab
+  if (hasContent && contentTabBtn) {
+    contentTabBtn.click();
+  } else if (hasJobs && jobsTabBtn) {
+    jobsTabBtn.click();
+  } else if (hasUsers && usersTabBtn) {
+    usersTabBtn.click();
+  }
+  
   loadDashboard();
 }
 
@@ -37,7 +99,7 @@ function showLogin() {
 
 async function loadDashboard() {
   try {
-    const [content, enquiryData, galleryData, siteContentData, jobsData, appsData, analyticsData, categoriesData, termsData, policyData] = await Promise.all([
+    const promises = [
       request("/api/content"), 
       request("/api/admin/leads"), 
       request("/api/gallery"), 
@@ -48,7 +110,29 @@ async function loadDashboard() {
       request("/api/job-categories"),
       request("/api/placement/terms"),
       request("/api/placement/policy")
-    ]);
+    ];
+
+    const results = await Promise.allSettled(promises);
+    
+    // If any request failed because the session is invalid, go to login
+    const authError = results.find(r => r.status === "rejected" && r.reason.message.includes("log in"));
+    if (authError) {
+      showLogin();
+      return;
+    }
+
+    const val = (index) => results[index].status === "fulfilled" ? results[index].value : {};
+
+    const content = val(0);
+    const enquiryData = val(1);
+    const galleryData = val(2);
+    const siteContentData = val(3);
+    const jobsData = val(4);
+    const appsData = val(5);
+    const analyticsData = val(6);
+    const categoriesData = val(7);
+    const termsData = val(8);
+    const policyData = val(9);
     
     const siteContent = siteContentData.content || {};
     const titleInput = document.querySelector("#content-heroTitle");
@@ -61,9 +145,9 @@ async function loadDashboard() {
     if (headlineInput) headlineInput.value = siteContent.aboutHeadline || "";
     if (contactInput) contactInput.value = siteContent.contactText || "";
 
-    renderPosts(content.posts);
-    renderLeads(enquiryData.leads, enquiryData.sheetsConfigured);
-    renderGallery(galleryData.gallery);
+    renderPosts(content.posts || []);
+    renderLeads(enquiryData.leads || [], enquiryData.sheetsConfigured);
+    renderGallery(galleryData.gallery || []);
 
     // Job Portal specific rendering
     renderJobs(jobsData.jobs || []);
@@ -76,6 +160,9 @@ async function loadDashboard() {
     if (termsInput) termsInput.value = termsData.content || "";
     if (policyInput) policyInput.value = policyData.content || "";
 
+    if (currentUser && currentUser.role === "super_admin") {
+      loadUsersGrid();
+    }
   } catch (error) {
     if (error.message.includes("log in")) showLogin();
   }
@@ -92,17 +179,26 @@ document.querySelectorAll(".dashboard-tabs .button").forEach(btn => {
     const jobsStats = document.getElementById("jobs-stats");
     const contentGrid = document.getElementById("content-grid");
     const jobsGrid = document.getElementById("jobs-grid");
+    const usersGrid = document.getElementById("users-grid");
 
     if (tab === "content") {
       contentStats.classList.remove("hidden");
       contentGrid.classList.remove("hidden");
       jobsStats.classList.add("hidden");
       jobsGrid.classList.add("hidden");
+      if (usersGrid) usersGrid.classList.add("hidden");
     } else if (tab === "jobs") {
       contentStats.classList.add("hidden");
       contentGrid.classList.add("hidden");
       jobsStats.classList.remove("hidden");
       jobsGrid.classList.remove("hidden");
+      if (usersGrid) usersGrid.classList.add("hidden");
+    } else if (tab === "users") {
+      contentStats.classList.add("hidden");
+      contentGrid.classList.add("hidden");
+      jobsStats.classList.add("hidden");
+      jobsGrid.classList.add("hidden");
+      if (usersGrid) usersGrid.classList.remove("hidden");
     }
   });
 });
@@ -965,3 +1061,321 @@ async function deleteLead(id) {
 request("/api/admin/session")
   .then(showDashboard)
   .catch(showLogin);
+
+// ==================== USER MANAGEMENT & RBAC LOGIC ====================
+
+const ROLE_TEMPLATES = {
+  super_admin: {
+    view_dashboard: true,
+    view_leads: true, edit_leads: true, delete_leads: true, export_leads: true,
+    create_posts: true, edit_posts: true, delete_posts: true, publish_posts: true,
+    create_jobs: true, edit_jobs: true, delete_jobs: true, view_applications: true, shortlist_candidates: true, export_applications: true,
+    upload_images: true, edit_gallery: true, delete_images: true,
+    view_students: true, add_students: true, edit_students: true, delete_students: true,
+    add_universities: true, edit_universities: true, delete_universities: true,
+    view_payments: true, verify_payments: true, refund_payments: true,
+    create_users: true, edit_users: true, delete_users: true, assign_permissions: true,
+    website_settings: true, seo_settings: true, smtp_settings: true, api_settings: true,
+    view_reports: true, export_reports: true
+  },
+  content_manager: { view_dashboard: true, create_posts: true, edit_posts: true, delete_posts: true, publish_posts: true },
+  lead_manager: { view_dashboard: true, view_leads: true, edit_leads: true, delete_leads: true, export_leads: true },
+  job_manager: { view_dashboard: true, create_jobs: true, edit_jobs: true, delete_jobs: true, view_applications: true, shortlist_candidates: true, export_applications: true },
+  gallery_manager: { view_dashboard: true, upload_images: true, edit_gallery: true, delete_images: true },
+  counselor: { view_dashboard: true, view_leads: true, edit_leads: true, view_students: true, add_students: true, edit_students: true },
+  accounts_executive: { view_dashboard: true, view_payments: true, verify_payments: true, refund_payments: true },
+  staff: {}
+};
+
+const PERMISSION_GROUPS = {
+  "Content & Gallery": { create_posts: "Create Posts", edit_posts: "Edit Posts", delete_posts: "Delete Posts", publish_posts: "Publish Posts", upload_images: "Upload Images", edit_gallery: "Edit Gallery", delete_images: "Delete Images" },
+  "Leads & Students": { view_leads: "View Leads", edit_leads: "Edit Leads", delete_leads: "Delete Leads", export_leads: "Export Leads", view_students: "View Students", add_students: "Add Students", edit_students: "Edit Students", delete_students: "Delete Students" },
+  "Jobs & Placements": { create_jobs: "Create Jobs", edit_jobs: "Edit Jobs", delete_jobs: "Delete Jobs", view_applications: "View Apps", shortlist_candidates: "Shortlist Candidates", export_applications: "Export Apps" },
+  "Universities": { add_universities: "Add Univ", edit_universities: "Edit Univ", delete_universities: "Delete Univ" },
+  "Payments": { view_payments: "View Payments", verify_payments: "Verify Payments", refund_payments: "Refund Payments" },
+  "System Settings": { create_users: "Create Users", edit_users: "Edit Users", delete_users: "Delete Users", assign_permissions: "Assign Perms", website_settings: "Website Config", seo_settings: "SEO", smtp_settings: "SMTP", api_settings: "API Keys", view_reports: "View Reports", export_reports: "Export Reports", view_dashboard: "Dashboard Access" }
+};
+
+const userModal = document.querySelector("[data-user-modal]");
+const userForm = document.getElementById("user-form");
+
+function renderPermissionMatrix() {
+  const container = document.getElementById("permission-matrix");
+  if (!container) return;
+  container.replaceChildren();
+
+  for (const [groupName, perms] of Object.entries(PERMISSION_GROUPS)) {
+    const groupDiv = document.createElement("div");
+    groupDiv.className = "permission-group";
+    
+    const title = document.createElement("h4");
+    title.innerHTML = `${groupName} <label><input type="checkbox" onchange="togglePermGroup(this, '${groupName}')"> Select All</label>`;
+    groupDiv.appendChild(title);
+
+    for (const [key, label] of Object.entries(perms)) {
+      const labelEl = document.createElement("label");
+      labelEl.className = "permission-checkbox";
+      labelEl.innerHTML = `<input type="checkbox" name="permissions.${key}" data-group="${groupName}" value="true"> ${label}`;
+      groupDiv.appendChild(labelEl);
+    }
+    container.appendChild(groupDiv);
+  }
+}
+
+window.togglePermGroup = function(checkbox, groupName) {
+  const checkboxes = document.querySelectorAll(`input[data-group="${groupName}"]`);
+  checkboxes.forEach(cb => cb.checked = checkbox.checked);
+};
+
+document.getElementById("user-role")?.addEventListener("change", (e) => {
+  const template = ROLE_TEMPLATES[e.target.value] || {};
+  document.querySelectorAll("#permission-matrix input[type='checkbox'][name^='permissions.']").forEach(cb => {
+    const key = cb.name.split(".")[1];
+    cb.checked = !!template[key];
+  });
+});
+
+async function loadUsersGrid() {
+  try {
+    const [usersRes, auditRes] = await Promise.all([
+      request("/api/admin/users"),
+      request("/api/admin/audit-logs")
+    ]);
+    renderUsers(usersRes.users || []);
+    renderAuditLogs(auditRes.logs || []);
+  } catch (error) {
+    console.error("Failed to load users grid", error);
+  }
+}
+
+function renderUsers(users) {
+  const tbody = document.getElementById("users-tbody");
+  if (!tbody) return;
+  tbody.replaceChildren();
+  
+  if (!users.length) {
+    tbody.innerHTML = "<tr><td colspan='6' class='empty'>No staff members found.</td></tr>";
+    return;
+  }
+  
+  users.forEach(user => {
+    const tr = document.createElement("tr");
+    
+    const nameCell = document.createElement("td");
+    nameCell.innerHTML = `<strong>${user.full_name}</strong><br><small class="muted">${user.designation || user.department || ''}</small>`;
+    
+    const emailCell = document.createElement("td");
+    emailCell.textContent = user.email;
+    
+    const roleCell = document.createElement("td");
+    const roleText = user.role.replace("_", " ").replace(/\b\w/g, l => l.toUpperCase());
+    roleCell.innerHTML = `<span class="badge" style="background:var(--cream); border:1px solid var(--line);">${roleText}</span>`;
+    
+    const statusCell = document.createElement("td");
+    const isLocked = user.locked_until && new Date(user.locked_until) > new Date();
+    const statusClass = isLocked ? "locked" : user.status === "active" ? "active" : "inactive";
+    const statusText = isLocked ? "Locked" : user.status === "active" ? "Active" : "Disabled";
+    statusCell.innerHTML = `<span class="badge ${statusClass}">${statusText}</span>`;
+    
+    const loginCell = document.createElement("td");
+    loginCell.textContent = user.last_login ? new Date(user.last_login).toLocaleString() : "Never";
+    
+    const actionsCell = document.createElement("td");
+    actionsCell.className = "actions-cell";
+    
+    const editBtn = document.createElement("button");
+    editBtn.className = "button sm outline";
+    editBtn.textContent = "Edit";
+    editBtn.onclick = () => openEditUserModal(user);
+    
+    actionsCell.appendChild(editBtn);
+    
+    if (user.id !== currentUser.userId) {
+      const toggleBtn = document.createElement("button");
+      toggleBtn.className = "button sm outline";
+      toggleBtn.textContent = user.status === "active" ? "Disable" : "Enable";
+      toggleBtn.onclick = () => toggleUserStatus(user.id, user.status === "active" ? "inactive" : "active");
+      
+      const resetBtn = document.createElement("button");
+      resetBtn.className = "button sm outline";
+      resetBtn.textContent = "Reset Pass";
+      resetBtn.onclick = () => resetUserPassword(user.id);
+      
+      const delBtn = document.createElement("button");
+      delBtn.className = "button sm danger";
+      delBtn.textContent = "Del";
+      delBtn.onclick = () => deleteUser(user.id);
+      
+      actionsCell.append(toggleBtn, resetBtn, delBtn);
+    }
+    
+    tr.append(nameCell, emailCell, roleCell, statusCell, loginCell, actionsCell);
+    tbody.appendChild(tr);
+  });
+}
+
+function renderAuditLogs(logs) {
+  const tbody = document.getElementById("audit-logs-tbody");
+  if (!tbody) return;
+  tbody.replaceChildren();
+  
+  if (!logs.length) {
+    tbody.innerHTML = "<tr><td colspan='5' class='empty'>No audit logs available.</td></tr>";
+    return;
+  }
+  
+  logs.forEach(log => {
+    const tr = document.createElement("tr");
+    
+    const timeCell = document.createElement("td");
+    timeCell.textContent = new Date(log.created_at).toLocaleString();
+    
+    const userCell = document.createElement("td");
+    userCell.textContent = log.admin_users ? log.admin_users.full_name : (log.user_id || "System");
+    
+    const actionCell = document.createElement("td");
+    actionCell.textContent = log.action;
+    
+    const ipCell = document.createElement("td");
+    ipCell.textContent = log.ip_address || "-";
+    
+    const detailsCell = document.createElement("td");
+    detailsCell.textContent = log.details ? JSON.stringify(log.details) : "-";
+    detailsCell.style.maxWidth = "200px";
+    detailsCell.style.overflow = "hidden";
+    detailsCell.style.textOverflow = "ellipsis";
+    detailsCell.style.whiteSpace = "nowrap";
+    detailsCell.title = log.details ? JSON.stringify(log.details, null, 2) : "";
+    
+    tr.append(timeCell, userCell, actionCell, ipCell, detailsCell);
+    tbody.appendChild(tr);
+  });
+}
+
+document.getElementById("btn-create-user")?.addEventListener("click", () => {
+  userForm.reset();
+  document.getElementById("user-id").value = "";
+  document.getElementById("user-modal-title").textContent = "Create User";
+  document.getElementById("user-email").disabled = false;
+  document.getElementById("user-password").required = true;
+  document.getElementById("user-password-field").style.display = "block";
+  document.querySelectorAll("#permission-matrix input[type='checkbox']").forEach(cb => cb.checked = false);
+  userModal.classList.add("visible");
+});
+
+function openEditUserModal(user) {
+  userForm.reset();
+  document.getElementById("user-id").value = user.id;
+  document.getElementById("user-modal-title").textContent = "Edit User";
+  
+  document.getElementById("user-name").value = user.full_name || "";
+  document.getElementById("user-email").value = user.email || "";
+  document.getElementById("user-email").disabled = true; // Can't edit email easily
+  
+  document.getElementById("user-phone").value = user.phone || "";
+  document.getElementById("user-department").value = user.department || "";
+  document.getElementById("user-designation").value = user.designation || "";
+  document.getElementById("user-role").value = user.role || "staff";
+  document.getElementById("user-status").value = user.status || "active";
+  
+  document.getElementById("user-password").required = false;
+  document.getElementById("user-password-field").style.display = "none";
+  
+  // Apply permissions
+  document.querySelectorAll("#permission-matrix input[type='checkbox'][name^='permissions.']").forEach(cb => {
+    const key = cb.name.split(".")[1];
+    cb.checked = user.permissions && user.permissions[key] === true;
+  });
+  
+  userModal.classList.add("visible");
+}
+
+document.querySelectorAll("[data-close-user-modal]").forEach(btn => {
+  btn.addEventListener("click", () => userModal.classList.remove("visible"));
+});
+
+userForm?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  
+  const userId = document.getElementById("user-id").value;
+  const isEdit = !!userId;
+  
+  const permissions = {};
+  document.querySelectorAll("#permission-matrix input[type='checkbox'][name^='permissions.']").forEach(cb => {
+    const key = cb.name.split(".")[1];
+    if (cb.checked) permissions[key] = true;
+  });
+  
+  const formData = new FormData(userForm);
+  const payload = Object.fromEntries(formData.entries());
+  payload.permissions = permissions;
+  
+  try {
+    if (isEdit) {
+      await request(`/api/admin/users/${userId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      await request(`/api/admin/users/${userId}/permissions`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ permissions })
+      });
+      alert("User updated successfully");
+    } else {
+      await request("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      alert("User created successfully");
+    }
+    userModal.classList.remove("visible");
+    loadUsersGrid();
+  } catch (error) {
+    console.error("Save user error:", error);
+    alert(error.message);
+  }
+});
+
+async function toggleUserStatus(id, newStatus) {
+  try {
+    await request(`/api/admin/users/${id}/status`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: newStatus })
+    });
+    loadUsersGrid();
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+async function deleteUser(id) {
+  if (!confirm("Are you sure you want to permanently delete this user?")) return;
+  try {
+    await request(`/api/admin/users/${id}`, { method: "DELETE" });
+    loadUsersGrid();
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+async function resetUserPassword(id) {
+  const newPassword = prompt("Enter the new password for this user:");
+  if (!newPassword) return;
+  try {
+    await request(`/api/admin/users/${id}/reset-password`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: newPassword })
+    });
+    alert("Password reset successfully.");
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+// Initialize matrix on script load
+renderPermissionMatrix();

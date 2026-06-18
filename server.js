@@ -220,6 +220,49 @@ const defaultPosts = [
   }
 ];
 
+// --- Enterprise RBAC: Password & Auth Helpers ---
+async function hashPassword(password) {
+  return new Promise((resolve, reject) => {
+    const salt = crypto.randomBytes(16).toString("hex");
+    crypto.scrypt(password, salt, 64, (err, derivedKey) => {
+      if (err) reject(err);
+      resolve(salt + ":" + derivedKey.toString("hex"));
+    });
+  });
+}
+
+async function verifyPassword(password, hash) {
+  return new Promise((resolve, reject) => {
+    const [salt, key] = hash.split(":");
+    crypto.scrypt(password, salt, 64, (err, derivedKey) => {
+      if (err) reject(err);
+      resolve(crypto.timingSafeEqual(Buffer.from(key, "hex"), derivedKey));
+    });
+  });
+}
+
+const ROLE_TEMPLATES = {
+  super_admin: {
+    view_dashboard: true,
+    view_leads: true, edit_leads: true, delete_leads: true, export_leads: true,
+    create_posts: true, edit_posts: true, delete_posts: true, publish_posts: true,
+    create_jobs: true, edit_jobs: true, delete_jobs: true, view_applications: true, shortlist_candidates: true, export_applications: true,
+    upload_images: true, edit_gallery: true, delete_images: true,
+    view_students: true, add_students: true, edit_students: true, delete_students: true,
+    add_universities: true, edit_universities: true, delete_universities: true,
+    view_payments: true, verify_payments: true, refund_payments: true,
+    create_users: true, edit_users: true, delete_users: true, assign_permissions: true,
+    website_settings: true, seo_settings: true, smtp_settings: true, api_settings: true,
+    view_reports: true, export_reports: true
+  },
+  content_manager: { view_dashboard: true, create_posts: true, edit_posts: true, delete_posts: true, publish_posts: true },
+  lead_manager: { view_dashboard: true, view_leads: true, edit_leads: true, delete_leads: true, export_leads: true },
+  job_manager: { view_dashboard: true, create_jobs: true, edit_jobs: true, delete_jobs: true, view_applications: true, shortlist_candidates: true, export_applications: true },
+  gallery_manager: { view_dashboard: true, upload_images: true, edit_gallery: true, delete_images: true },
+  counselor: { view_dashboard: true, view_leads: true, edit_leads: true, view_students: true, add_students: true, edit_students: true },
+  accounts_executive: { view_dashboard: true, view_payments: true, verify_payments: true, refund_payments: true }
+};
+
 function createApp(options = {}) {
   const dataDir = options.dataDir || process.env.DATA_DIR || DEFAULT_DATA_DIR;
   const adminEmail = (options.adminEmail || process.env.ADMIN_EMAIL || "skywardcareerandplacementhub@gmail.com").toLowerCase();
@@ -246,7 +289,7 @@ function createApp(options = {}) {
     sessionCleanupInterval.unref();
   }
   const globalLimiter = new RateLimiter(100, 60 * 1000);       // 100 requests per minute
-  const loginLimiter = new RateLimiter(5, 15 * 60 * 1000);     // 5 attempts per 15 minutes
+  const loginLimiter = new RateLimiter(10, 15 * 60 * 1000);     // 10 attempts per 15 minutes
   const leadsLimiter = new RateLimiter(5, 60 * 60 * 1000);     // 5 submissions per hour
   const applyLimiter = new RateLimiter(15, 60 * 60 * 1000);     // 15 applications per hour
   const uploadsDir = path.join(dataDir, "uploads");
@@ -516,13 +559,52 @@ function createApp(options = {}) {
     return { token, ...session };
   }
 
-  function requireAdmin(req, res) {
+  function requireAuth(req, res) {
     const session = currentSession(req);
     if (!session) {
       sendJson(res, 401, { error: "Please log in to continue." });
       return null;
     }
     return session;
+  }
+
+  function requirePermission(req, res, permissionKey) {
+    const session = requireAuth(req, res);
+    if (!session) return null;
+    
+    // Super admins always have access
+    if (session.role === "super_admin") return session;
+    
+    if (!session.permissions || !session.permissions[permissionKey]) {
+      sendJson(res, 403, { error: "Access Denied: You do not have permission to perform this action." });
+      return null;
+    }
+    return session;
+  }
+
+  function requireSuperAdmin(req, res) {
+    const session = requireAuth(req, res);
+    if (!session) return null;
+    if (session.role !== "super_admin") {
+      sendJson(res, 403, { error: "Access Denied: Super Admin access required." });
+      return null;
+    }
+    return session;
+  }
+
+  async function logAudit(userId, action, details, ipAddress) {
+    try {
+      if (!supabase) return;
+      await supabase.from("audit_logs").insert([{
+        user_id: userId,
+        action: action,
+        details: details,
+        performed_by: userId,
+        ip_address: ipAddress
+      }]);
+    } catch (err) {
+      console.error("Failed to write audit log", err);
+    }
   }
 
   function verifyCsrf(req, res, session) {
@@ -745,28 +827,108 @@ function createApp(options = {}) {
 
     if (req.method === "POST" && pathname === "/api/admin/login") {
       const body = await parseBody(req);
-      if (clean(body.email).toLowerCase() !== adminEmail || !safeEqual(clean(body.password), adminPassword)) {
+      const emailInput = clean(body.email).toLowerCase();
+      const passwordInput = clean(body.password);
+      const ipAddress = getClientIp(req);
+
+      if (loginLimiter.isLimitExceeded(ipAddress)) {
+        return sendJson(res, 429, { error: "Too many login attempts. Please try again later." });
+      }
+
+      let user = null;
+
+      // 1. Check Supabase for user
+      if (supabase) {
+        const { data } = await supabase.from("admin_users").select("*").eq("email", emailInput).single();
+        user = data;
+      }
+
+      // 2. Bootstrap Super Admin if it's the .env credentials and not in DB
+      if (!user && emailInput === adminEmail && safeEqual(passwordInput, adminPassword)) {
+        if (supabase) {
+          const passHash = await hashPassword(adminPassword);
+          const { data } = await supabase.from("admin_users").insert([{
+            full_name: "Super Admin",
+            email: adminEmail,
+            password_hash: passHash,
+            role: "super_admin",
+            permissions: ROLE_TEMPLATES.super_admin
+          }]).select("*").single();
+          user = data;
+        } else {
+          // Fallback if supabase isn't connected
+          user = { id: "offline-admin", email: adminEmail, role: "super_admin", permissions: ROLE_TEMPLATES.super_admin, status: "active" };
+        }
+      }
+
+      if (!user) {
         return sendJson(res, 401, { error: "Incorrect email or password." });
       }
+
+      if (user.status !== "active") {
+        await logAudit(user.id, "failed_login", { reason: "account_inactive" }, ipAddress);
+        return sendJson(res, 403, { error: "Your account is disabled. Contact administrator." });
+      }
+
+      if (user.locked_until && new Date(user.locked_until) > new Date()) {
+        return sendJson(res, 403, { error: "Account temporarily locked due to multiple failed attempts. Try again later." });
+      }
+
+      let passwordValid = false;
+      if (user.id === "offline-admin") {
+        passwordValid = safeEqual(passwordInput, adminPassword);
+      } else {
+        try {
+          passwordValid = await verifyPassword(passwordInput, user.password_hash);
+        } catch (e) {
+          passwordValid = false;
+        }
+      }
+
+      if (!passwordValid) {
+        if (user.id !== "offline-admin" && supabase) {
+          const attempts = (user.failed_login_attempts || 0) + 1;
+          const updates = { failed_login_attempts: attempts };
+          if (attempts >= 10) {
+             updates.locked_until = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // lock for 15 mins
+          }
+          await supabase.from("admin_users").update(updates).eq("id", user.id);
+          await logAudit(user.id, "failed_login", { attempts }, ipAddress);
+        }
+        return sendJson(res, 401, { error: "Incorrect email or password." });
+      }
+
+      if (user.id !== "offline-admin" && supabase) {
+        await supabase.from("admin_users").update({ failed_login_attempts: 0, locked_until: null, last_login: new Date().toISOString() }).eq("id", user.id);
+        await logAudit(user.id, "login", {}, ipAddress);
+      }
+
       const token = crypto.randomBytes(32).toString("hex");
       const csrfToken = crypto.randomBytes(24).toString("hex");
-      sessions.set(token, { csrfToken, expiresAt: Date.now() + SESSION_MAX_AGE, email: adminEmail });
+      sessions.set(token, { 
+        csrfToken, 
+        expiresAt: Date.now() + SESSION_MAX_AGE, 
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+        permissions: user.permissions
+      });
       const isProduction = process.env.NODE_ENV === "production" || !(req.headers.host || "").includes("localhost");
       res.setHeader(
         "Set-Cookie",
         `skyward_session=${token}.${sign(token)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${SESSION_MAX_AGE / 1000}${isProduction ? "; Secure" : ""}`
       );
-      return sendJson(res, 200, { email: adminEmail, csrfToken });
+      return sendJson(res, 200, { email: user.email, role: user.role, permissions: user.permissions, csrfToken });
     }
 
     if (req.method === "GET" && pathname === "/api/admin/session") {
       const session = currentSession(req);
       if (!session) return sendJson(res, 401, { authenticated: false });
-      return sendJson(res, 200, { authenticated: true, email: session.email, csrfToken: session.csrfToken });
+      return sendJson(res, 200, { authenticated: true, email: session.email, role: session.role, permissions: session.permissions, csrfToken: session.csrfToken });
     }
 
     if (req.method === "GET" && pathname === "/api/admin/debug-env") {
-      const session = requireAdmin(req, res);
+      const session = requireSuperAdmin(req, res);
       if (!session) return;
       
       const keyExists = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -797,7 +959,7 @@ function createApp(options = {}) {
     }
 
     if (req.method === "POST" && pathname === "/api/admin/logout") {
-      const session = requireAdmin(req, res);
+      const session = requireAuth(req, res);
       if (!session || !verifyCsrf(req, res, session)) return;
       sessions.delete(session.token);
       res.setHeader("Set-Cookie", "skyward_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0");
@@ -805,7 +967,7 @@ function createApp(options = {}) {
     }
 
     if (req.method === "GET" && pathname === "/api/admin/leads") {
-  const session = requireAdmin(req, res);
+  const session = requirePermission(req, res, "view_leads");
   if (!session) return;
 
   return sendJson(res, 200, {
@@ -815,7 +977,7 @@ function createApp(options = {}) {
 }
 
 if (req.method === "DELETE" && pathname.startsWith("/api/admin/leads/")) {
-  const session = requireAdmin(req, res);
+  const session = requirePermission(req, res, "delete_leads");
   if (!session || !verifyCsrf(req, res, session)) return;
   const id = pathname.split("/").pop();
 
@@ -840,7 +1002,7 @@ if (req.method === "DELETE" && pathname.startsWith("/api/admin/leads/")) {
 }
 
 if (req.method === "POST" && pathname === "/api/admin/leads/email") {
-  const session = requireAdmin(req, res);
+  const session = requirePermission(req, res, "edit_leads");
   if (!session || !verifyCsrf(req, res, session)) return;
   const body = await parseBody(req);
   const { leadId, subject, message } = body;
@@ -889,7 +1051,7 @@ if (req.method === "POST" && pathname === "/api/admin/leads/email") {
 
 
     if (req.method === "POST" && pathname === "/api/admin/leads/sync") {
-      const session = requireAdmin(req, res);
+      const session = requirePermission(req, res, "edit_leads");
       if (!session || !verifyCsrf(req, res, session)) return;
       if (!googleSheetsWebhookUrl) {
         return sendJson(res, 400, { error: "Google Sheets is not configured yet. Add your webhook URL first." });
@@ -913,7 +1075,7 @@ if (req.method === "POST" && pathname === "/api/admin/leads/email") {
 }
  
     if (req.method === "POST" && pathname === "/api/admin/gallery") {
-      const session = requireAdmin(req, res);
+      const session = requirePermission(req, res, "upload_images");
       if (!session || !verifyCsrf(req, res, session)) return;
       const { fields: body, file } = await parsePostSubmission(req);
       const savedMedia = await saveUploadedMedia(file);
@@ -963,7 +1125,7 @@ if (req.method === "POST" && pathname === "/api/admin/leads/email") {
 
     const galleryMatch = pathname.match(/^\/api\/admin\/gallery\/([a-zA-Z0-9-]+)$/);
     if (req.method === "DELETE" && galleryMatch) {
-      const session = requireAdmin(req, res);
+      const session = requirePermission(req, res, "delete_images");
       if (!session || !verifyCsrf(req, res, session)) return;
       const gallery = readData("gallery.json", []);
       const removedItem = gallery.find((item) => item.id === galleryMatch[1]);
@@ -985,7 +1147,7 @@ if (req.method === "POST" && pathname === "/api/admin/leads/email") {
 
 
     if (req.method === "POST" && pathname === "/api/admin/posts") {
-      const session = requireAdmin(req, res);
+      const session = requirePermission(req, res, "create_posts");
       if (!session || !verifyCsrf(req, res, session)) return;
       const { fields: body, file } = await parsePostSubmission(req);
       const savedMedia = await saveUploadedMedia(file);
@@ -1044,7 +1206,7 @@ if (req.method === "POST" && pathname === "/api/admin/leads/email") {
 const postMatch = pathname.match(/^\/api\/admin\/posts\/([a-zA-Z0-9-]+)$/);
 
 if (req.method === "DELETE" && postMatch) {
-  const session = requireAdmin(req, res);
+  const session = requirePermission(req, res, "delete_posts");
   if (!session || !verifyCsrf(req, res, session)) return;
 
   const { error } = await supabase
@@ -1299,7 +1461,7 @@ if (req.method === "DELETE" && postMatch) {
 
     // --- Admin: List all jobs ---
     if (req.method === "GET" && pathname === "/api/admin/jobs") {
-      const session = requireSession(req, res);
+      const session = requirePermission(req, res, "view_jobs");
       if (!session) return;
       const { data, error } = await supabase
         .from("jobs")
@@ -1311,7 +1473,7 @@ if (req.method === "DELETE" && postMatch) {
 
     // --- Admin: Create job ---
     if (req.method === "POST" && pathname === "/api/admin/jobs") {
-      const session = requireSession(req, res);
+      const session = requirePermission(req, res, "create_jobs");
       if (!session || !verifyCsrf(req, res, session)) return;
       const { fields: body, file } = await parsePostSubmission(req);
       const savedLogo = await saveUploadedMedia(file);
@@ -1361,7 +1523,7 @@ if (req.method === "DELETE" && postMatch) {
     // --- Admin: Update job ---
     const adminJobMatch = pathname.match(/^\/api\/admin\/jobs\/([a-zA-Z0-9-]+)$/);
     if (req.method === "PUT" && adminJobMatch) {
-      const session = requireSession(req, res);
+      const session = requirePermission(req, res, "edit_jobs");
       if (!session || !verifyCsrf(req, res, session)) return;
       const jobId = adminJobMatch[1];
       const { fields: body, file } = await parsePostSubmission(req);
@@ -1395,7 +1557,7 @@ if (req.method === "DELETE" && postMatch) {
 
     // --- Admin: Delete job ---
     if (req.method === "DELETE" && adminJobMatch) {
-      const session = requireSession(req, res);
+      const session = requirePermission(req, res, "delete_jobs");
       if (!session || !verifyCsrf(req, res, session)) return;
       const { error } = await supabase.from("jobs").delete().eq("id", adminJobMatch[1]);
       if (error) return sendJson(res, 500, { error: error.message });
@@ -1405,7 +1567,7 @@ if (req.method === "DELETE" && postMatch) {
     // --- Admin: Toggle job active/featured ---
     const toggleMatch = pathname.match(/^\/api\/admin\/jobs\/([a-zA-Z0-9-]+)\/toggle$/);
     if (req.method === "PATCH" && toggleMatch) {
-      const session = requireSession(req, res);
+      const session = requirePermission(req, res, "edit_jobs");
       if (!session || !verifyCsrf(req, res, session)) return;
       const body = await parseBody(req);
       const updates = { updated_at: new Date().toISOString() };
@@ -1418,7 +1580,7 @@ if (req.method === "DELETE" && postMatch) {
 
     // --- Admin: List all applications ---
     if (req.method === "GET" && pathname === "/api/admin/applications") {
-      const session = requireSession(req, res);
+      const session = requirePermission(req, res, "view_applications");
       if (!session) return;
       const url = new URL(req.url, "http://localhost");
       let query = supabase
@@ -1441,7 +1603,7 @@ if (req.method === "DELETE" && postMatch) {
     // --- Admin: Update application status ---
     const appStatusMatch = pathname.match(/^\/api\/admin\/applications\/([a-zA-Z0-9-]+)\/status$/);
     if (req.method === "PATCH" && appStatusMatch) {
-      const session = requireSession(req, res);
+      const session = requirePermission(req, res, "shortlist_candidates");
       if (!session || !verifyCsrf(req, res, session)) return;
       const body = await parseBody(req);
       const validStatuses = ["New", "Shortlisted", "Interview Scheduled", "Selected", "Rejected", "Joined"];
@@ -1453,7 +1615,7 @@ if (req.method === "DELETE" && postMatch) {
 
     // --- Admin: Job analytics ---
     if (req.method === "GET" && pathname === "/api/admin/job-analytics") {
-      const session = requireSession(req, res);
+      const session = requirePermission(req, res, "view_dashboard");
       if (!session) return;
       const [jobsRes, activeRes, appsRes, selectedRes, joinedRes] = await Promise.all([
         supabase.from("jobs").select("*", { count: "exact", head: true }),
@@ -1473,7 +1635,7 @@ if (req.method === "DELETE" && postMatch) {
 
     // --- Admin: Add category ---
     if (req.method === "POST" && pathname === "/api/admin/job-categories") {
-      const session = requireSession(req, res);
+      const session = requirePermission(req, res, "create_jobs");
       if (!session || !verifyCsrf(req, res, session)) return;
       const body = await parseBody(req);
       const name = clean(body.name);
@@ -1487,7 +1649,7 @@ if (req.method === "DELETE" && postMatch) {
     // --- Admin: Delete category ---
     const catDelMatch = pathname.match(/^\/api\/admin\/job-categories\/([a-zA-Z0-9-]+)$/);
     if (req.method === "DELETE" && catDelMatch) {
-      const session = requireSession(req, res);
+      const session = requirePermission(req, res, "delete_jobs");
       if (!session || !verifyCsrf(req, res, session)) return;
       const { error } = await supabase.from("job_categories").delete().eq("id", catDelMatch[1]);
       if (error) return sendJson(res, 500, { error: error.message });
@@ -1496,7 +1658,7 @@ if (req.method === "DELETE" && postMatch) {
 
     // --- Admin: Update placement terms ---
     if (req.method === "PUT" && pathname === "/api/admin/placement/terms") {
-      const session = requireAdmin(req, res);
+      const session = requirePermission(req, res, "website_settings");
       if (!session || !verifyCsrf(req, res, session)) return;
       const body = await parseBody(req);
       const { data: existing } = await supabase.from("placement_settings").select("id").limit(1).single();
@@ -1510,7 +1672,7 @@ if (req.method === "DELETE" && postMatch) {
 
     // --- Admin: Update placement policy ---
     if (req.method === "PUT" && pathname === "/api/admin/placement/policy") {
-      const session = requireAdmin(req, res);
+      const session = requirePermission(req, res, "website_settings");
       if (!session || !verifyCsrf(req, res, session)) return;
       const body = await parseBody(req);
       const { data: existing } = await supabase.from("placement_settings").select("id").limit(1).single();
@@ -1520,6 +1682,166 @@ if (req.method === "DELETE" && postMatch) {
         await supabase.from("placement_settings").insert([{ policy_content: clean(body.content) }]);
       }
       return sendJson(res, 200, { message: "Policy updated." });
+    }
+
+    // ==================== USER MANAGEMENT & RBAC API ====================
+
+    // --- Admin: List all users ---
+    if (req.method === "GET" && pathname === "/api/admin/users") {
+      const session = requireSuperAdmin(req, res);
+      if (!session) return;
+      const { data, error } = await supabase.from("admin_users").select("id, full_name, email, phone, role, permissions, department, designation, status, last_login, created_at").order("created_at", { ascending: false });
+      if (error) return sendJson(res, 500, { error: error.message });
+      return sendJson(res, 200, { users: data || [] });
+    }
+
+    // --- Admin: Create user ---
+    if (req.method === "POST" && pathname === "/api/admin/users") {
+      const session = requireSuperAdmin(req, res);
+      if (!session || !verifyCsrf(req, res, session)) return;
+      const body = await parseBody(req);
+      
+      const email = clean(body.email).toLowerCase();
+      const fullName = clean(body.full_name);
+      const password = clean(body.password);
+      if (!email || !fullName || !password) return sendJson(res, 400, { error: "Name, email and password are required." });
+      
+      const { data: existing } = await supabase.from("admin_users").select("id").eq("email", email).single();
+      if (existing) return sendJson(res, 400, { error: "A user with this email already exists." });
+      
+      const passHash = await hashPassword(password);
+      
+      const user = {
+        full_name: fullName,
+        email: email,
+        phone: clean(body.phone),
+        password_hash: passHash,
+        role: clean(body.role) || "staff",
+        permissions: body.permissions || {},
+        department: clean(body.department),
+        designation: clean(body.designation),
+        status: body.status === "inactive" ? "inactive" : "active",
+        created_by: session.userId
+      };
+      
+      const { data, error } = await supabase.from("admin_users").insert([user]).select("id, full_name, email, role, status").single();
+      if (error) return sendJson(res, 500, { error: error.message });
+      
+      await logAudit(session.userId, "user_created", { target_email: email, role: user.role }, getClientIp(req));
+      return sendJson(res, 201, { user: data });
+    }
+
+    const adminUserMatch = pathname.match(/^\/api\/admin\/users\/([a-zA-Z0-9-]+)$/);
+    
+    // --- Admin: Update user details ---
+    if (req.method === "PUT" && adminUserMatch) {
+      const session = requireSuperAdmin(req, res);
+      if (!session || !verifyCsrf(req, res, session)) return;
+      const userId = adminUserMatch[1];
+      const body = await parseBody(req);
+      
+      const updates = { updated_at: new Date().toISOString() };
+      if (body.full_name) updates.full_name = clean(body.full_name);
+      if (body.phone !== undefined) updates.phone = clean(body.phone);
+      if (body.department !== undefined) updates.department = clean(body.department);
+      if (body.designation !== undefined) updates.designation = clean(body.designation);
+      if (body.role) updates.role = clean(body.role);
+      
+      const { data, error } = await supabase.from("admin_users").update(updates).eq("id", userId).select("id, full_name, email").single();
+      if (error) return sendJson(res, 500, { error: error.message });
+      
+      await logAudit(session.userId, "user_updated", { target_id: userId, updates: Object.keys(updates) }, getClientIp(req));
+      return sendJson(res, 200, { user: data });
+    }
+
+    // --- Admin: Update user permissions ---
+    const adminUserPermMatch = pathname.match(/^\/api\/admin\/users\/([a-zA-Z0-9-]+)\/permissions$/);
+    if (req.method === "PUT" && adminUserPermMatch) {
+      const session = requireSuperAdmin(req, res);
+      if (!session || !verifyCsrf(req, res, session)) return;
+      const userId = adminUserPermMatch[1];
+      const body = await parseBody(req);
+      
+      if (!body.permissions || typeof body.permissions !== "object") {
+        return sendJson(res, 400, { error: "Invalid permissions object." });
+      }
+      
+      const { data, error } = await supabase.from("admin_users").update({ permissions: body.permissions, updated_at: new Date().toISOString() }).eq("id", userId).select("id").single();
+      if (error) return sendJson(res, 500, { error: error.message });
+      
+      await logAudit(session.userId, "permissions_changed", { target_id: userId }, getClientIp(req));
+      return sendJson(res, 200, { message: "Permissions updated." });
+    }
+
+    // --- Admin: Toggle user status ---
+    const adminUserStatusMatch = pathname.match(/^\/api\/admin\/users\/([a-zA-Z0-9-]+)\/status$/);
+    if (req.method === "PUT" && adminUserStatusMatch) {
+      const session = requireSuperAdmin(req, res);
+      if (!session || !verifyCsrf(req, res, session)) return;
+      const userId = adminUserStatusMatch[1];
+      const body = await parseBody(req);
+      
+      const status = body.status === "inactive" ? "inactive" : "active";
+      const { error } = await supabase.from("admin_users").update({ status, locked_until: null, failed_login_attempts: 0, updated_at: new Date().toISOString() }).eq("id", userId);
+      if (error) return sendJson(res, 500, { error: error.message });
+      
+      await logAudit(session.userId, "user_status_changed", { target_id: userId, status }, getClientIp(req));
+      return sendJson(res, 200, { message: `User status changed to ${status}.` });
+    }
+
+    // --- Admin: Reset user password ---
+    const adminUserResetMatch = pathname.match(/^\/api\/admin\/users\/([a-zA-Z0-9-]+)\/reset-password$/);
+    if (req.method === "PUT" && adminUserResetMatch) {
+      const session = requireSuperAdmin(req, res);
+      if (!session || !verifyCsrf(req, res, session)) return;
+      const userId = adminUserResetMatch[1];
+      const body = await parseBody(req);
+      
+      if (!body.password) return sendJson(res, 400, { error: "New password is required." });
+      
+      const passHash = await hashPassword(clean(body.password));
+      const { error } = await supabase.from("admin_users").update({ password_hash: passHash, updated_at: new Date().toISOString() }).eq("id", userId);
+      if (error) return sendJson(res, 500, { error: error.message });
+      
+      await logAudit(session.userId, "password_reset", { target_id: userId }, getClientIp(req));
+      return sendJson(res, 200, { message: "Password reset successfully." });
+    }
+
+    // --- Admin: Delete user ---
+    if (req.method === "DELETE" && adminUserMatch) {
+      const session = requireSuperAdmin(req, res);
+      if (!session || !verifyCsrf(req, res, session)) return;
+      const userId = adminUserMatch[1];
+      
+      // Prevent deleting self
+      if (userId === session.userId) {
+        return sendJson(res, 400, { error: "You cannot delete your own account." });
+      }
+      
+      const { error } = await supabase.from("admin_users").delete().eq("id", userId);
+      if (error) return sendJson(res, 500, { error: error.message });
+      
+      await logAudit(session.userId, "user_deleted", { target_id: userId }, getClientIp(req));
+      return sendJson(res, 200, { message: "User deleted." });
+    }
+
+    // --- Admin: Audit Logs ---
+    if (req.method === "GET" && pathname === "/api/admin/audit-logs") {
+      const session = requireSuperAdmin(req, res);
+      if (!session) return;
+      const url = new URL(req.url, "http://localhost");
+      const page = Math.max(1, parseInt(url.searchParams.get("page")) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit")) || 50));
+      const offset = (page - 1) * limit;
+
+      const { data, error, count } = await supabase
+        .from("audit_logs")
+        .select("*, admin_users!user_id(full_name, email), performed_by_user:admin_users!performed_by(full_name, email)", { count: "exact" })
+        .order("created_at", { ascending: false })
+        .range(offset, offset + limit - 1);
+        
+      if (error) return sendJson(res, 500, { error: error.message });
+      return sendJson(res, 200, { logs: data || [], total: count || 0, page, limit });
     }
 
     sendJson(res, 404, { error: "Endpoint not found." });
