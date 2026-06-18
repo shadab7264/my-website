@@ -155,7 +155,12 @@ document.addEventListener("DOMContentLoaded", () => {
         </div>
         <div class="job-card-footer">
           <span class="job-date">Posted ${new Date(job.created_at).toLocaleDateString('en-IN', {day: 'numeric', month: 'short'})}</span>
-          <span class="button sm outline">View & Apply</span>
+          <div class="job-card-actions" style="display: flex; gap: 8px; align-items: center;">
+            <button class="button sm outline share-btn" title="Share Job" type="button" data-share-title="${job.title}" data-share-slug="${job.slug}" style="padding: 0 10px; display: flex; align-items: center; justify-content: center; height: 36px; min-width: 36px;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>
+            </button>
+            <span class="button sm outline">View & Apply</span>
+          </div>
         </div>
       `;
       jobsGrid.appendChild(card);
@@ -252,4 +257,75 @@ document.addEventListener("DOMContentLoaded", () => {
     
     fetchJobs();
   });
+
+  // Share Button Action Handler
+  document.addEventListener("click", async (e) => {
+    const shareBtn = e.target.closest(".share-btn");
+    if (shareBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const title = shareBtn.getAttribute("data-share-title");
+      const slug = shareBtn.getAttribute("data-share-slug");
+      const url = `${window.location.origin}/jobs/${slug}`;
+
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            title: `Job Opening: ${title} at Skyward`,
+            text: `Check out this job opening: ${title}`,
+            url: url
+          });
+        } catch (err) {
+          if (err.name !== "AbortError") {
+            console.error("Share failed:", err);
+          }
+        }
+      } else {
+        // Fallback: Copy to clipboard
+        try {
+          await navigator.clipboard.writeText(url);
+          showToast("Job link copied to clipboard!");
+        } catch (err) {
+          console.error("Clipboard copy failed:", err);
+        }
+      }
+    }
+  });
+
+  function showToast(message) {
+    let toast = document.getElementById("share-toast");
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.id = "share-toast";
+      toast.style.cssText = `
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        background: var(--navy, #092b21);
+        color: white;
+        padding: 12px 24px;
+        border-radius: 8px;
+        border: 1px solid var(--gold, #c5a572);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+        z-index: 9999;
+        font-size: 14px;
+        font-family: 'Outfit', sans-serif;
+        transform: translateY(100px);
+        opacity: 0;
+        transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.35s ease;
+      `;
+      document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    requestAnimationFrame(() => {
+      toast.style.transform = "translateY(0)";
+      toast.style.opacity = "1";
+    });
+    
+    if (toast.timeoutId) clearTimeout(toast.timeoutId);
+    toast.timeoutId = setTimeout(() => {
+      toast.style.transform = "translateY(100px)";
+      toast.style.opacity = "0";
+    }, 3000);
+  }
 });
