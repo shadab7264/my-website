@@ -1,5 +1,21 @@
 "use strict";
 
+document.body.classList.add("motion-ready");
+
+// Floating Header Scroll Effect
+const header = document.querySelector(".site-header");
+if (header) {
+  const handleScroll = () => {
+    if (window.scrollY > 40) {
+      header.classList.add("scrolled");
+    } else {
+      header.classList.remove("scrolled");
+    }
+  };
+  window.addEventListener("scroll", handleScroll, { passive: true });
+  handleScroll(); // Run immediately on load
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   const slug = window.location.pathname.split("/").pop();
   if (!slug || slug === "jobs") {
