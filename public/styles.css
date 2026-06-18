@@ -2834,11 +2834,13 @@ th {
   gap: 6px;
   max-width: 100%;
   transition: all 0.2s ease;
+  min-width: 0; /* Enable shrinking inside flex layouts */
 }
 .job-tag span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0; /* Enable ellipsis truncation on text */
 }
 .job-tag svg {
   flex-shrink: 0;
