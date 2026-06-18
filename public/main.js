@@ -77,6 +77,12 @@ fetch("/api/jobs?limit=3&is_featured=true")
         return `${min}-${max} Years`;
       };
 
+      const formatLoc = (loc) => {
+        if (!loc) return "India";
+        const parts = loc.split(',').map(s => s.trim()).filter(Boolean);
+        return parts.length > 0 ? parts.join(', ') : "India";
+      };
+
       const card = document.createElement("a");
       card.className = "job-card featured";
       card.href = `/jobs/${job.slug}`;
@@ -89,6 +95,8 @@ fetch("/api/jobs?limit=3&is_featured=true")
         logoHtml = `<div class="job-card-logo-placeholder">${initial}</div>`;
       }
 
+      const cleanLocation = formatLoc(job.location);
+
       card.innerHTML = `
         <div class="job-card-header">
           ${logoHtml}
@@ -98,9 +106,9 @@ fetch("/api/jobs?limit=3&is_featured=true")
           </div>
         </div>
         <div class="job-card-tags">
-          <span class="job-tag location" title="${job.location}">
+          <span class="job-tag location" title="${cleanLocation}">
             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-            <span>${job.location}</span>
+            <span>${cleanLocation}</span>
           </span>
           <span class="job-tag salary">
             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="9" x2="16" y2="9"></line><line x1="6" y1="13" x2="18" y2="13"></line><path d="M6 5h12a4 4 0 0 1 0 8H6c0 0 6 6 10 11"></path></svg>

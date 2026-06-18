@@ -3006,6 +3006,12 @@ th {
   display: flex;
   align-items: center;
   gap: 16px;
+  min-width: 0;
+}
+.stat-item > div {
+  min-width: 0;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 .stat-item .icon {
   font-size: 1.5rem;
@@ -3016,6 +3022,7 @@ th {
   align-items: center;
   justify-content: center;
   border-radius: 8px;
+  flex-shrink: 0;
 }
 
 .job-description {
