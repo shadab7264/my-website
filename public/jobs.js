@@ -97,9 +97,9 @@ document.addEventListener("DOMContentLoaded", () => {
     return `₹${formatNumber(min)} - ${formatNumber(max)} ${unit}`;
   }
 
-  function formatExp(min, max) {
+  function formatExp(min, max, level = "") {
+    if (level === "Fresher" || (min === 0 && max === 0)) return "No Experience Needed";
     if (!min && !max) return "Any Experience";
-    if (min === 0 && max === 0) return "Fresher";
     if (min && !max) return `${min}+ Years`;
     if (!min && max) return `Up to ${max} Years`;
     return `${min}-${max} Years`;
@@ -146,7 +146,7 @@ document.addEventListener("DOMContentLoaded", () => {
           </span>
           <span class="job-tag experience">
             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
-            <span>${formatExp(job.experience_min, job.experience_max)}</span>
+            <span>${formatExp(job.experience_min, job.experience_max, job.experience_level)}</span>
           </span>
           <span class="job-tag type">
             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
