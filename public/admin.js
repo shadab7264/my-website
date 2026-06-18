@@ -23,42 +23,9 @@ async function request(url, options = {}) {
 
 function showDashboard(session) {
   csrfToken = session.csrfToken;
-  window.userRole = session.role || "admin";
   loginPanel.classList.add("hidden");
   dashboard.classList.add("visible");
   document.querySelector("[data-admin-email]").textContent = session.email;
-
-  const titleEl = document.querySelector(".dashboard-head h1");
-  const tabsContainer = document.querySelector(".dashboard-tabs");
-
-  if (window.userRole === "job_poster") {
-    if (tabsContainer) tabsContainer.classList.add("hidden");
-    if (titleEl) titleEl.textContent = "Careers & Applications";
-
-    // Switch stats and grid to jobs view
-    document.getElementById("content-stats")?.classList.add("hidden");
-    document.getElementById("content-grid")?.classList.add("hidden");
-    document.getElementById("jobs-stats")?.classList.remove("hidden");
-    document.getElementById("jobs-grid")?.classList.remove("hidden");
-  } else {
-    if (tabsContainer) tabsContainer.classList.remove("hidden");
-    if (titleEl) titleEl.textContent = "Content & enquiries";
-
-    // Switch stats and grid back to default active tab (content)
-    const activeTab = document.querySelector(".dashboard-tabs .button.active")?.dataset.tab || "content";
-    if (activeTab === "jobs") {
-      document.getElementById("content-stats")?.classList.add("hidden");
-      document.getElementById("content-grid")?.classList.add("hidden");
-      document.getElementById("jobs-stats")?.classList.remove("hidden");
-      document.getElementById("jobs-grid")?.classList.remove("hidden");
-    } else {
-      document.getElementById("content-stats")?.classList.remove("hidden");
-      document.getElementById("content-grid")?.classList.remove("hidden");
-      document.getElementById("jobs-stats")?.classList.add("hidden");
-      document.getElementById("jobs-grid")?.classList.add("hidden");
-    }
-  }
-
   loadDashboard();
 }
 
@@ -70,10 +37,9 @@ function showLogin() {
 
 async function loadDashboard() {
   try {
-    const isJobPoster = window.userRole === "job_poster";
     const [content, enquiryData, galleryData, siteContentData, jobsData, appsData, analyticsData, categoriesData, termsData, policyData] = await Promise.all([
       request("/api/content"), 
-      isJobPoster ? Promise.resolve({ leads: [], sheetsConfigured: false }) : request("/api/admin/leads"), 
+      request("/api/admin/leads"), 
       request("/api/gallery"), 
       request("/api/content/site"),
       request("/api/admin/jobs"),

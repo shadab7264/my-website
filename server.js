@@ -224,8 +224,6 @@ function createApp(options = {}) {
   const dataDir = options.dataDir || process.env.DATA_DIR || DEFAULT_DATA_DIR;
   const adminEmail = (options.adminEmail || process.env.ADMIN_EMAIL || "skywardcareerandplacementhub@gmail.com").toLowerCase();
   const adminPassword = options.adminPassword || process.env.ADMIN_PASSWORD || "ChangeMe123!";
-  const jobPosterEmail = (options.jobPosterEmail || process.env.JOB_POSTER_EMAIL || "recruiter@skywardeducation.com").toLowerCase();
-  const jobPosterPassword = options.jobPosterPassword || process.env.JOB_POSTER_PASSWORD || "RecruitMe123!";
   const sessionSecret = options.sessionSecret || process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex");
   const googleSheetsWebhookUrl = options.googleSheetsWebhookUrl || process.env.GOOGLE_SHEETS_WEBHOOK_URL || "";
   const googleSheetsSecret = options.googleSheetsSecret || process.env.GOOGLE_SHEETS_SECRET || "";
@@ -518,20 +516,10 @@ function createApp(options = {}) {
     return { token, ...session };
   }
 
-  function requireSession(req, res) {
+  function requireAdmin(req, res) {
     const session = currentSession(req);
     if (!session) {
       sendJson(res, 401, { error: "Please log in to continue." });
-      return null;
-    }
-    return session;
-  }
-
-  function requireAdmin(req, res) {
-    const session = requireSession(req, res);
-    if (!session) return null;
-    if (session.role !== "admin") {
-      sendJson(res, 403, { error: "Forbidden: Admin access required." });
       return null;
     }
     return session;
@@ -757,39 +745,24 @@ function createApp(options = {}) {
 
     if (req.method === "POST" && pathname === "/api/admin/login") {
       const body = await parseBody(req);
-      const emailInput = clean(body.email).toLowerCase();
-      const passwordInput = clean(body.password);
-
-      let authenticatedEmail = null;
-      let userRole = null;
-
-      if (emailInput === adminEmail && safeEqual(passwordInput, adminPassword)) {
-        authenticatedEmail = adminEmail;
-        userRole = "admin";
-      } else if (emailInput === jobPosterEmail && safeEqual(passwordInput, jobPosterPassword)) {
-        authenticatedEmail = jobPosterEmail;
-        userRole = "job_poster";
-      }
-
-      if (!authenticatedEmail) {
+      if (clean(body.email).toLowerCase() !== adminEmail || !safeEqual(clean(body.password), adminPassword)) {
         return sendJson(res, 401, { error: "Incorrect email or password." });
       }
-
       const token = crypto.randomBytes(32).toString("hex");
       const csrfToken = crypto.randomBytes(24).toString("hex");
-      sessions.set(token, { csrfToken, expiresAt: Date.now() + SESSION_MAX_AGE, email: authenticatedEmail, role: userRole });
+      sessions.set(token, { csrfToken, expiresAt: Date.now() + SESSION_MAX_AGE, email: adminEmail });
       const isProduction = process.env.NODE_ENV === "production" || !(req.headers.host || "").includes("localhost");
       res.setHeader(
         "Set-Cookie",
         `skyward_session=${token}.${sign(token)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${SESSION_MAX_AGE / 1000}${isProduction ? "; Secure" : ""}`
       );
-      return sendJson(res, 200, { email: authenticatedEmail, role: userRole, csrfToken });
+      return sendJson(res, 200, { email: adminEmail, csrfToken });
     }
 
     if (req.method === "GET" && pathname === "/api/admin/session") {
       const session = currentSession(req);
       if (!session) return sendJson(res, 401, { authenticated: false });
-      return sendJson(res, 200, { authenticated: true, email: session.email, role: session.role || "admin", csrfToken: session.csrfToken });
+      return sendJson(res, 200, { authenticated: true, email: session.email, csrfToken: session.csrfToken });
     }
 
     if (req.method === "GET" && pathname === "/api/admin/debug-env") {
