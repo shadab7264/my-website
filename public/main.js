@@ -98,9 +98,18 @@ fetch("/api/jobs?limit=3&is_featured=true")
           </div>
         </div>
         <div class="job-card-tags">
-          <span class="job-tag location">📍 ${job.location}</span>
-          <span class="job-tag salary">💰 ${formatSal(job.salary_min, job.salary_max, job.salary_period)}</span>
-          <span class="job-tag experience">👨‍💻 ${formatExp(job.experience_min, job.experience_max)}</span>
+          <span class="job-tag location" title="${job.location}">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+            <span>${job.location}</span>
+          </span>
+          <span class="job-tag salary">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="9" x2="16" y2="9"></line><line x1="6" y1="13" x2="18" y2="13"></line><path d="M6 5h12a4 4 0 0 1 0 8H6c0 0 6 6 10 11"></path></svg>
+            <span>${formatSal(job.salary_min, job.salary_max, job.salary_period)}</span>
+          </span>
+          <span class="job-tag experience">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
+            <span>${formatExp(job.experience_min, job.experience_max)}</span>
+          </span>
         </div>
         <div class="job-card-footer">
           <span class="job-date">Posted ${new Date(job.created_at).toLocaleDateString('en-IN', {day: 'numeric', month: 'short'})}</span>
