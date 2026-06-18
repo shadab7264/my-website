@@ -80,11 +80,21 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function formatSalary(min, max) {
+  function formatSalary(min, max, period = "Yearly") {
     if (!min && !max) return "Not Disclosed";
-    if (min && !max) return `₹${(min/100000).toFixed(1)} LPA+`;
-    if (!min && max) return `Up to ₹${(max/100000).toFixed(1)} LPA`;
-    return `₹${(min/100000).toFixed(1)} - ${(max/100000).toFixed(1)} LPA`;
+    const isMonthly = period === "Monthly";
+    const unit = isMonthly ? "/ Month" : "LPA";
+    const formatNumber = (val) => {
+      if (isMonthly) {
+        return val >= 1000 ? `${(val / 1000).toFixed(0)}K` : val;
+      } else {
+        return `${(val / 100000).toFixed(1)}`;
+      }
+    };
+
+    if (min && !max) return `₹${formatNumber(min)} ${unit}+`;
+    if (!min && max) return `Up to ₹${formatNumber(max)} ${unit}`;
+    return `₹${formatNumber(min)} - ${formatNumber(max)} ${unit}`;
   }
 
   function formatExp(min, max) {
@@ -132,7 +142,7 @@ document.addEventListener("DOMContentLoaded", () => {
           </span>
           <span class="job-tag salary">
             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="9" x2="16" y2="9"></line><line x1="6" y1="13" x2="18" y2="13"></line><path d="M6 5h12a4 4 0 0 1 0 8H6c0 0 6 6 10 11"></path></svg>
-            <span>${formatSalary(job.salary_min, job.salary_max)}</span>
+            <span>${formatSalary(job.salary_min, job.salary_max, job.salary_period)}</span>
           </span>
           <span class="job-tag experience">
             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>

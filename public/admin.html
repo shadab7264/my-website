@@ -179,11 +179,11 @@
 
           <!-- Jobs Grid (Hidden by default) -->
           <div class="admin-grid hidden" id="jobs-grid">
-            <section class="panel wide">
+            <section class="panel wide" id="job-form-panel">
               <div class="panel-head">
                 <div>
-                  <h2>Post a New Job</h2>
-                  <p class="muted">Publish career opportunities to the Jobs portal.</p>
+                  <h2 id="job-form-title">Post a New Job</h2>
+                  <p class="muted" id="job-form-subtitle">Publish career opportunities to the Jobs portal.</p>
                 </div>
               </div>
               <form class="stack-form job-form" data-job-form>
@@ -237,11 +237,18 @@
                     </select>
                   </div>
                   <div class="field">
-                    <label for="job-sal-min">Min Salary (LPA)</label>
+                    <label for="job-sal-period">Salary Unit</label>
+                    <select id="job-sal-period" name="salary_period">
+                      <option value="Yearly">Lakhs Per Annum (LPA)</option>
+                      <option value="Monthly">Per Month (INR)</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="job-sal-min" id="job-sal-min-label">Min Salary (LPA)</label>
                     <input type="number" id="job-sal-min" name="salary_min" placeholder="e.g. 300000">
                   </div>
                   <div class="field">
-                    <label for="job-sal-max">Max Salary (LPA)</label>
+                    <label for="job-sal-max" id="job-sal-max-label">Max Salary (LPA)</label>
                     <input type="number" id="job-sal-max" name="salary_max" placeholder="e.g. 500000">
                   </div>
                   <div class="field">
@@ -270,7 +277,10 @@
                     </label>
                   </div>
                 </div>
-                <button class="button gold" type="submit">Publish Job</button>
+                <div style="display: flex; gap: 12px; align-items: center;">
+                  <button class="button gold" type="submit" id="job-submit-btn">Publish Job</button>
+                  <button class="button outline hidden" type="button" id="job-cancel-btn">Cancel Edit</button>
+                </div>
                 <p class="form-message" data-job-message aria-live="polite"></p>
               </form>
             </section>

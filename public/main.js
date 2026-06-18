@@ -52,11 +52,21 @@ fetch("/api/jobs?limit=3&is_featured=true")
     
     featuredContainer.innerHTML = '';
     data.jobs.forEach(job => {
-      const formatSal = (min, max) => {
+      const formatSal = (min, max, period = "Yearly") => {
         if (!min && !max) return "Not Disclosed";
-        if (min && !max) return `₹${(min/100000).toFixed(1)} LPA+`;
-        if (!min && max) return `Up to ₹${(max/100000).toFixed(1)} LPA`;
-        return `₹${(min/100000).toFixed(1)} - ${(max/100000).toFixed(1)} LPA`;
+        const isMonthly = period === "Monthly";
+        const unit = isMonthly ? "/ Month" : "LPA";
+        const formatNumber = (val) => {
+          if (isMonthly) {
+            return val >= 1000 ? `${(val / 1000).toFixed(0)}K` : val;
+          } else {
+            return `${(val / 100000).toFixed(1)}`;
+          }
+        };
+
+        if (min && !max) return `₹${formatNumber(min)} ${unit}+`;
+        if (!min && max) return `Up to ₹${formatNumber(max)} ${unit}`;
+        return `₹${formatNumber(min)} - ${formatNumber(max)} ${unit}`;
       };
       
       const formatExp = (min, max) => {
@@ -89,7 +99,7 @@ fetch("/api/jobs?limit=3&is_featured=true")
         </div>
         <div class="job-card-tags">
           <span class="job-tag location">📍 ${job.location}</span>
-          <span class="job-tag salary">💰 ${formatSal(job.salary_min, job.salary_max)}</span>
+          <span class="job-tag salary">💰 ${formatSal(job.salary_min, job.salary_max, job.salary_period)}</span>
           <span class="job-tag experience">👨‍💻 ${formatExp(job.experience_min, job.experience_max)}</span>
         </div>
         <div class="job-card-footer">

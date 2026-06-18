@@ -1,6 +1,7 @@
 "use strict";
 
 let csrfToken = "";
+let editingJobId = null;
 
 const loginPanel = document.querySelector("[data-login-panel]");
 const dashboard = document.querySelector("[data-dashboard]");
@@ -303,7 +304,13 @@ function renderJobs(jobs) {
     deleteBtn.textContent = "Delete";
     deleteBtn.addEventListener("click", () => deleteJob(job.id));
 
-    actionsCell.append(toggleBtn, featureBtn, deleteBtn);
+    const editBtn = document.createElement("button");
+    editBtn.className = "button sm gold action-btn";
+    editBtn.type = "button";
+    editBtn.textContent = "Edit";
+    editBtn.addEventListener("click", () => startEditJob(job));
+
+    actionsCell.append(editBtn, toggleBtn, featureBtn, deleteBtn);
     row.append(actionsCell);
 
     table.append(row);
@@ -491,6 +498,90 @@ async function deleteJob(id) {
   }
 }
 
+function startEditJob(job) {
+  editingJobId = job.id;
+  
+  // Set headers
+  document.getElementById("job-form-title").textContent = `Edit Job: ${job.title}`;
+  document.getElementById("job-form-subtitle").textContent = `Updating job posting for ${job.company_name}.`;
+  document.getElementById("job-submit-btn").textContent = "Save Changes";
+  document.getElementById("job-cancel-btn").classList.remove("hidden");
+
+  // Populate fields
+  const form = document.querySelector("[data-job-form]");
+  if (!form) return;
+
+  form.querySelector("[name='title']").value = job.title || "";
+  form.querySelector("[name='company_name']").value = job.company_name || "";
+  form.querySelector("[name='location']").value = job.location || "";
+  form.querySelector("[name='category_id']").value = job.category_id || "";
+  form.querySelector("[name='employment_type']").value = job.employment_type || "Full-Time";
+  form.querySelector("[name='work_mode']").value = job.work_mode || "Work From Office";
+  form.querySelector("[name='experience_level']").value = job.experience_level || "Both";
+  form.querySelector("[name='salary_period']").value = job.salary_period || "Yearly";
+  form.querySelector("[name='salary_min']").value = job.salary_min || 0;
+  form.querySelector("[name='salary_max']").value = job.salary_max || 0;
+  form.querySelector("[name='experience_min']").value = job.experience_min || 0;
+  form.querySelector("[name='experience_max']").value = job.experience_max || 0;
+  form.querySelector("[name='openings']").value = job.openings || 1;
+  form.querySelector("[name='skills_required']").value = (job.skills_required || []).join(", ");
+  form.querySelector("[name='description']").value = job.description || "";
+  form.querySelector("[name='is_featured']").checked = Boolean(job.is_featured);
+
+  updateSalaryLabels();
+
+  // Scroll to form panel
+  document.getElementById("job-form-panel")?.scrollIntoView({ behavior: "smooth" });
+}
+
+function cancelEditJob() {
+  editingJobId = null;
+  
+  // Reset headers
+  document.getElementById("job-form-title").textContent = "Post a New Job";
+  document.getElementById("job-form-subtitle").textContent = "Publish career opportunities to the Jobs portal.";
+  document.getElementById("job-submit-btn").textContent = "Publish Job";
+  document.getElementById("job-cancel-btn").classList.add("hidden");
+
+  // Reset form
+  const form = document.querySelector("[data-job-form]");
+  if (form) {
+    form.reset();
+    updateSalaryLabels();
+  }
+}
+
+// Salary Period labels & placeholders helper
+function updateSalaryLabels() {
+  const form = document.querySelector("[data-job-form]");
+  if (!form) return;
+  const salaryPeriodSelect = form.querySelector("[name='salary_period']");
+  const salaryMinLabel = document.getElementById("job-sal-min-label");
+  const salaryMaxLabel = document.getElementById("job-sal-max-label");
+  const salaryMinInput = document.getElementById("job-sal-min");
+  const salaryMaxInput = document.getElementById("job-sal-max");
+
+  if (!salaryPeriodSelect) return;
+  const isMonthly = salaryPeriodSelect.value === "Monthly";
+  if (isMonthly) {
+    if (salaryMinLabel) salaryMinLabel.textContent = "Min Salary (Per Month)";
+    if (salaryMaxLabel) salaryMaxLabel.textContent = "Max Salary (Per Month)";
+    if (salaryMinInput) salaryMinInput.placeholder = "e.g. 25000";
+    if (salaryMaxInput) salaryMaxInput.placeholder = "e.g. 40000";
+  } else {
+    if (salaryMinLabel) salaryMinLabel.textContent = "Min Salary (LPA)";
+    if (salaryMaxLabel) salaryMaxLabel.textContent = "Max Salary (LPA)";
+    if (salaryMinInput) salaryMinInput.placeholder = "e.g. 300000";
+    if (salaryMaxInput) salaryMaxInput.placeholder = "e.g. 500000";
+  }
+}
+
+// Register change event on salary period dropdown
+const periodSelect = document.getElementById("job-sal-period");
+if (periodSelect) {
+  periodSelect.addEventListener("change", updateSalaryLabels);
+}
+
 // Job Form Submission
 const jobForm = document.querySelector("[data-job-form]");
 const jobMessage = document.querySelector("[data-job-message]");
@@ -498,7 +589,7 @@ if (jobForm) {
   jobForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     jobMessage.classList.remove("error");
-    jobMessage.textContent = "Publishing job...";
+    jobMessage.textContent = editingJobId ? "Saving changes..." : "Publishing job...";
     const btn = jobForm.querySelector("button[type='submit']");
     btn.disabled = true;
 
@@ -511,12 +602,25 @@ if (jobForm) {
         formData.set("media", compressed);
       }
 
-      await request("/api/admin/jobs", {
-        method: "POST",
-        body: formData
-      });
-      jobForm.reset();
-      jobMessage.textContent = "Job published successfully!";
+      // Explicitly set is_featured as boolean string to avoid unchecked omission bug
+      const isFeatured = jobForm.querySelector("[name='is_featured']").checked;
+      formData.set("is_featured", isFeatured ? "true" : "false");
+
+      if (editingJobId) {
+        await request(`/api/admin/jobs/${editingJobId}`, {
+          method: "PUT",
+          body: formData
+        });
+        jobMessage.textContent = "Job updated successfully!";
+        cancelEditJob();
+      } else {
+        await request("/api/admin/jobs", {
+          method: "POST",
+          body: formData
+        });
+        jobForm.reset();
+        jobMessage.textContent = "Job published successfully!";
+      }
       await loadDashboard();
     } catch (err) {
       jobMessage.classList.add("error");
@@ -525,6 +629,11 @@ if (jobForm) {
       btn.disabled = false;
     }
   });
+}
+
+const cancelBtn = document.getElementById("job-cancel-btn");
+if (cancelBtn) {
+  cancelBtn.addEventListener("click", cancelEditJob);
 }
 
 // Settings Forms

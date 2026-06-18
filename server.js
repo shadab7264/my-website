@@ -1336,6 +1336,7 @@ if (req.method === "DELETE" && postMatch) {
         location: clean(body.location) || "India",
         salary_min: parseInt(body.salary_min) || 0,
         salary_max: parseInt(body.salary_max) || 0,
+        salary_period: clean(body.salary_period) || "Yearly",
         experience_min: parseInt(body.experience_min) || 0,
         experience_max: parseInt(body.experience_max) || 0,
         employment_type: clean(body.employment_type) || "Full-Time",
@@ -1373,6 +1374,7 @@ if (req.method === "DELETE" && postMatch) {
       if (body.location) updates.location = clean(body.location);
       if (body.salary_min !== undefined) updates.salary_min = parseInt(body.salary_min) || 0;
       if (body.salary_max !== undefined) updates.salary_max = parseInt(body.salary_max) || 0;
+      if (body.salary_period) updates.salary_period = clean(body.salary_period);
       if (body.experience_min !== undefined) updates.experience_min = parseInt(body.experience_min) || 0;
       if (body.experience_max !== undefined) updates.experience_max = parseInt(body.experience_max) || 0;
       if (body.employment_type) updates.employment_type = clean(body.employment_type);
